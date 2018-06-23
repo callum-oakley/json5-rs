@@ -1,29 +1,196 @@
-json = _{ soi ~ value ~ eoi }
+// from https://www.ecma-international.org/ecma-262/5.1
 
-value = _{ null | bool | number | string | object | array }
+source_character = _{
+  any
+}
 
-null = { "null" }
+white_space = _{
+  "\u{0009}" |
+  "\u{000B}" |
+  "\u{000C}" |
+  "\u{0020}" |
+  "\u{00A0}" |
+  "\u{FEFF}"
+}
 
-bool = { "true" | "false" }
+line_terminator = _{
+  "\u{000A}" |
+  "\u{000D}" |
+  "\u{2028}" |
+  "\u{2029}"
+}
 
-number = @{ "-"? ~ non_negative_number }
+multi_line_comment = _{
+  "/*" ~ multi_line_comment_chars? ~ "*/"
+}
 
-// TODO exponents
-non_negative_number = @{ "0" | ('1'..'9') ~ ('0'..'9')* ~ ("." ~ ('0'..'9')+)? }
+multi_line_comment_chars = _{
+  !"*/" ~ source_character
+}
 
-string = @{ "\"" ~ inner_char* ~ "\"" }
+single_line_comment = _{
+  "//" ~ single_line_comment_chars?
+}
 
-// TODO escaping etc
-inner_char = _{ !("\"") ~ any }
+single_line_comment_chars = _{
+  !line_terminator ~ source_character
+}
 
-object = { "{" ~ "}" | "{" ~ pairs ~ "}" }
+identifier_name = _{
+  identifier_start ~ (identifier_part)*
+}
 
-pairs = _{ (pair ~ ",")* ~ pair }
+// TODO
+identifier_start = _{
+  'a'..'z' |
+  'A'..'Z'
+}
 
-pair = _{ string ~ ":" ~ value }
+// TODO
+identifier_part = _{
+  identifier_part |
+  '0'..'9' |
+  '_'
+}
 
-array = { "[" ~ "]" | "[" ~ elements ~ "]" }
+null_literal = _{
+  "null"
+}
 
-elements = _{ (value ~ ",")* ~ value }
+boolean_literal = _{
+  "true" |
+  "false"
+}
 
-whitespace = _{ " " | "\t" | "\r" | "\n" }
+escape_sequence = _{
+  character_escape_sequence |
+  "0" |
+  hex_escape_sequence |
+  unicode_escape_sequence
+}
+// TODO^
+
+// from https://spec.json5.org/#lexical-grammar
+
+json5_source_character = _{
+  source_character
+}
+
+json5_input_element = _{
+  white_space |
+  line_terminator |
+  multi_line_comment |
+  single_line_comment
+  json5_token
+}
+
+json5_token = _{
+  json5_identifier |
+  json5_punctuator |
+  json5_string |
+  json5_number
+}
+
+json5_identifier = _{
+  identifier_name
+}
+
+json5_punctuator = _{
+  "{" |
+  "}" |
+  "[" |
+  "]" |
+  ":" |
+  ","
+}
+
+json5_null = _{
+  null_literal
+}
+
+json5_boolean = _{
+  boolean_literal
+}
+
+json5_string = _{
+  "\"" ~ json5_double_string_characters? ~ "\"" |
+  "'" ~ json5_single_string_characters? ~ "'" |
+}
+
+json5_double_string_characters = _{
+  json5_double_string_character ~ json5_double_string_characters?
+}
+
+json5_single_string_characters = _{
+  json5_single_string_character ~ json5_single_string_characters?
+}
+
+json5_double_string_character = _{
+  !("\"" | "\\" | line_terminator) ~ source_character |
+  "\\" ~ escape_sequence |
+  line_continuation |
+  "\u{2028}" |
+  "\u{2029}"
+}
+
+json5_single_string_character = _{
+  !("'" | "\\" | line_terminator) ~ source_character |
+  "\\" ~ escape_sequence |
+  line_continuation |
+  "\u{2028}" |
+  "\u{2029}"
+}
+
+json5_number = _{
+  json5_numeric_literal |
+  "+" ~ json5_numeric_literal |
+  "-" ~ json5_numeric_literal
+}
+
+json5_numeric_literal = _{
+  numeric_literal |
+  "Infinity" |
+  "NaN"
+}
+
+// from https://spec.json5.org/#syntactic-grammar
+
+json5_text = _{
+  soi ~ json5_value ~ eoi
+}
+
+json5_value = _{
+  json5_null |
+  json5_boolean |
+  json5_string |
+  json5_number |
+  json5_object |
+  json5_array
+}
+
+json5_object = _{
+  "{" ~ json5_member_list ~ ","? ~ "}" |
+  "{" ~ "}"
+}
+
+json5_member_list = _{
+  (json5_member_list ~ ",")* ~ json5_member
+}
+
+json5_member = _{
+  json5_member_name ~ ":" ~ json5_value
+}
+
+json5_member_name = _{
+  json5_identifier |
+  json5_string
+}
+
+json5_array = _{
+  "[" ~ json5_element_list ~ ","? ~ "]" |
+  "[" ~ "]"
+}
+
+json5_element_list = _{
+  (json5_value ~ ",")* ~ json5_value
+}
