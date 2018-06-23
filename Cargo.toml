@@ -1,0 +1,8 @@
+[package]
+name = "json5-parser"
+version = "0.1.0"
+authors = ["Callum Oakley <c.oakley108@gmail.com>"]
+
+[dependencies]
+pest = "*"
+pest_derive = "*"

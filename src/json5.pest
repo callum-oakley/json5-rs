@@ -1,0 +1,29 @@
+json = _{ soi ~ value ~ eoi }
+
+value = _{ null | bool | number | string | object | array }
+
+null = { "null" }
+
+bool = { "true" | "false" }
+
+number = @{ "-"? ~ non_negative_number }
+
+// TODO exponents
+non_negative_number = @{ "0" | ('1'..'9') ~ ('0'..'9')* ~ ("." ~ ('0'..'9')+)? }
+
+string = @{ "\"" ~ inner_char* ~ "\"" }
+
+// TODO escaping etc
+inner_char = _{ !("\"") ~ any }
+
+object = { "{" ~ "}" | "{" ~ pairs ~ "}" }
+
+pairs = _{ (pair ~ ",")* ~ pair }
+
+pair = _{ string ~ ":" ~ value }
+
+array = { "[" ~ "]" | "[" ~ elements ~ "]" }
+
+elements = _{ (value ~ ",")* ~ value }
+
+whitespace = _{ " " | "\t" | "\r" | "\n" }
