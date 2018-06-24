@@ -1,16 +1,148 @@
-// from https://www.ecma-international.org/ecma-262/5.1
+// see https://spec.json5.org/#syntactic-grammar and
+// https://spec.json5.org/#lexical-grammar
 
-source_character = _{
-  any
+text = _{
+  soi ~ value ~ eoi
 }
 
-white_space = _{
-  "\u{0009}" |
-  "\u{000B}" |
-  "\u{000C}" |
-  "\u{0020}" |
-  "\u{00A0}" |
-  "\u{FEFF}"
+value = _{
+  null |
+  boolean |
+  string |
+  number |
+  object |
+  array
+}
+
+null = {
+  "null"
+}
+
+boolean = {
+  "true" |
+  "false"
+}
+
+string = @{
+  "\"" ~ double_string_character* ~ "\"" |
+  "'" ~ single_string_character* ~ "'"
+}
+
+number = @{
+  numeric_literal |
+  "+" ~ numeric_literal |
+  "-" ~ numeric_literal
+}
+
+object = {
+  "{" ~ key_value_pairs ~ ","? ~ "}" |
+  "{" ~ "}"
+}
+
+array = {
+  "[" ~ element_list ~ ","? ~ "]" |
+  "[" ~ "]"
+}
+
+identifier = {
+  identifier_start ~ (identifier_part)*
+}
+
+key_value_pairs = _{
+  (key_value_pair ~ ",")* ~ key_value_pair
+}
+
+key_value_pair = {
+  key ~ ":" ~ value
+}
+
+key = _{
+  identifier |
+  string
+}
+
+element_list = _{
+  (value ~ ",")* ~ value
+}
+
+numeric_literal = _{
+  decimal_literal |
+  hex_integer_literal |
+  "Infinity" |
+  "NaN"
+}
+
+decimal_literal = _{
+  decimal_integer_literal ~ "." ~ decimal_digits? ~ exponent_part? |
+  "." ~ decimal_digits ~ exponent_part? |
+  decimal_integer_literal ~ exponent_part?
+}
+
+decimal_integer_literal = _{
+  "0" |
+  non_zero_digit ~ decimal_digits?
+}
+
+decimal_digits = _{
+  decimal_digit+
+}
+
+decimal_digit = _{
+  '0'..'9'
+}
+
+non_zero_digit = _{
+  '1'..'9'
+}
+
+exponent_part = _{
+  exponent_indicator ~ signed_integer
+}
+
+exponent_indicator = _{
+  ^"e"
+}
+
+signed_integer = _{
+  decimal_digits |
+  "+" ~ decimal_digits |
+  "-" ~ decimal_digits
+}
+
+hex_integer_literal = _{
+  "0x" ~ hex_digit+ |
+  "0X" ~ hex_digit+
+}
+
+hex_digit = _{
+  '0'..'9' |
+  'a'..'f' |
+  'A'..'F'
+}
+
+double_string_character = _{
+  "\u{2028}" |
+  "\u{2029}" |
+  "\\" ~ escape_sequence |
+  line_continuation |
+  !("\"" | "\\" | line_terminator) ~ any
+}
+
+single_string_character = _{
+  "\u{2028}" |
+  "\u{2029}" |
+  "\\" ~ escape_sequence |
+  line_continuation |
+  !("'" | "\\" | line_terminator) ~ any
+}
+
+line_continuation = _{
+  "\\" ~ line_terminator_sequence
+}
+
+line_terminator_sequence = _{
+  "\u{000D}" ~ "\u{000A}" |
+  line_terminator
 }
 
 line_terminator = _{
@@ -18,26 +150,6 @@ line_terminator = _{
   "\u{000D}" |
   "\u{2028}" |
   "\u{2029}"
-}
-
-multi_line_comment = _{
-  "/*" ~ multi_line_comment_chars? ~ "*/"
-}
-
-multi_line_comment_chars = _{
-  !"*/" ~ source_character
-}
-
-single_line_comment = _{
-  "//" ~ single_line_comment_chars?
-}
-
-single_line_comment_chars = _{
-  !line_terminator ~ source_character
-}
-
-identifier_name = _{
-  identifier_start ~ (identifier_part)*
 }
 
 // TODO
@@ -48,149 +160,45 @@ identifier_start = _{
 
 // TODO
 identifier_part = _{
-  identifier_part |
+  identifier_start |
   '0'..'9' |
-  '_'
+  "_"
 }
 
-null_literal = _{
-  "null"
-}
-
-boolean_literal = _{
-  "true" |
-  "false"
-}
-
+// TODO
 escape_sequence = _{
-  character_escape_sequence |
-  "0" |
-  hex_escape_sequence |
-  unicode_escape_sequence
-}
-// TODO^
-
-// from https://spec.json5.org/#lexical-grammar
-
-json5_source_character = _{
-  source_character
+  "\"" |
+  "\\"
 }
 
-json5_input_element = _{
-  white_space |
-  line_terminator |
-  multi_line_comment |
-  single_line_comment
-  json5_token
-}
-
-json5_token = _{
-  json5_identifier |
-  json5_punctuator |
-  json5_string |
-  json5_number
-}
-
-json5_identifier = _{
-  identifier_name
-}
-
-json5_punctuator = _{
-  "{" |
-  "}" |
-  "[" |
-  "]" |
-  ":" |
-  ","
-}
-
-json5_null = _{
-  null_literal
-}
-
-json5_boolean = _{
-  boolean_literal
-}
-
-json5_string = _{
-  "\"" ~ json5_double_string_characters? ~ "\"" |
-  "'" ~ json5_single_string_characters? ~ "'" |
-}
-
-json5_double_string_characters = _{
-  json5_double_string_character ~ json5_double_string_characters?
-}
-
-json5_single_string_characters = _{
-  json5_single_string_character ~ json5_single_string_characters?
-}
-
-json5_double_string_character = _{
-  !("\"" | "\\" | line_terminator) ~ source_character |
-  "\\" ~ escape_sequence |
-  line_continuation |
+whitespace = _{
+  "\u{0009}" |
+  "\u{000A}" |
+  "\u{000B}" |
+  "\u{000C}" |
+  "\u{000D}" |
+  "\u{0020}" |
+  "\u{00A0}" |
+  "\u{1680}" |
+  "\u{2000}" |
+  "\u{2001}" |
+  "\u{2002}" |
+  "\u{2003}" |
+  "\u{2004}" |
+  "\u{2005}" |
+  "\u{2006}" |
+  "\u{2007}" |
+  "\u{2008}" |
+  "\u{2009}" |
+  "\u{200A}" |
   "\u{2028}" |
-  "\u{2029}"
+  "\u{202F}" |
+  "\u{205F}" |
+  "\u{3000}" |
+  "\u{FEFF}"
 }
 
-json5_single_string_character = _{
-  !("'" | "\\" | line_terminator) ~ source_character |
-  "\\" ~ escape_sequence |
-  line_continuation |
-  "\u{2028}" |
-  "\u{2029}"
-}
-
-json5_number = _{
-  json5_numeric_literal |
-  "+" ~ json5_numeric_literal |
-  "-" ~ json5_numeric_literal
-}
-
-json5_numeric_literal = _{
-  numeric_literal |
-  "Infinity" |
-  "NaN"
-}
-
-// from https://spec.json5.org/#syntactic-grammar
-
-json5_text = _{
-  soi ~ json5_value ~ eoi
-}
-
-json5_value = _{
-  json5_null |
-  json5_boolean |
-  json5_string |
-  json5_number |
-  json5_object |
-  json5_array
-}
-
-json5_object = _{
-  "{" ~ json5_member_list ~ ","? ~ "}" |
-  "{" ~ "}"
-}
-
-json5_member_list = _{
-  (json5_member_list ~ ",")* ~ json5_member
-}
-
-json5_member = _{
-  json5_member_name ~ ":" ~ json5_value
-}
-
-json5_member_name = _{
-  json5_identifier |
-  json5_string
-}
-
-json5_array = _{
-  "[" ~ json5_element_list ~ ","? ~ "]" |
-  "[" ~ "]"
-}
-
-json5_element_list = _{
-  (json5_value ~ ",")* ~ json5_value
+comment = _{
+  "/*" ~ (!"*/" ~ any)* ~ "*/" |
+  "//" ~ (!line_terminator ~ any)*
 }
