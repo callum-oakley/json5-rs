@@ -5,6 +5,7 @@ extern crate pest_derive;
 use pest::iterators::{Pair, Pairs};
 use pest::{Error, Parser};
 use std::collections::HashMap;
+use std::f64::{INFINITY, NAN, NEG_INFINITY};
 
 const _GRAMMAR: &str = include_str!("json5.pest");
 
@@ -60,10 +61,12 @@ fn parse_string(s: &str) -> String {
 }
 
 fn parse_number(s: &str) -> f64 {
-    if s.len() > 2 && &s[..2] == "0x" {
-        i64::from_str_radix(&s[2..], 16).unwrap() as f64
-    } else {
-        s.parse().unwrap()
+    match s {
+        "Infinity" => INFINITY,
+        "-Infinity" => NEG_INFINITY,
+        "NaN" | "-NaN" => NAN,
+        _ if s.len() > 2 && &s[..2] == "0x" => parse_hex(s),
+        _ => s.parse().unwrap(),
     }
 }
 
@@ -80,4 +83,8 @@ fn parse_object(members: Pairs<Rule>) -> HashMap<String, Value> {
 
 fn parse_array(elements: Pairs<Rule>) -> Vec<Value> {
     elements.map(Value::from_pair).collect()
+}
+
+fn parse_hex(s: &str) -> f64 {
+    i64::from_str_radix(&s[2..], 16).unwrap() as f64
 }
