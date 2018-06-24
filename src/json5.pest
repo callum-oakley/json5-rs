@@ -36,16 +36,12 @@ number = @{
 
 object = {
   "{" ~ "}" |
-  "{" ~ key_value_pairs ~ ","? ~ "}"
+  "{" ~ key_value_pair ~ ("," ~ key_value_pair)* ~ ","? ~ "}"
 }
 
 array = {
   "[" ~ "]" |
-  "[" ~ element_list ~ ","? ~ "]"
-}
-
-key_value_pairs = _{
-  (key_value_pair ~ ",")* ~ key_value_pair
+  "[" ~ value ~ ("," ~ value)* ~ ","? ~ "]"
 }
 
 key_value_pair = {
@@ -59,10 +55,6 @@ key = _{
 
 identifier = ${
   identifier_start ~ (identifier_part)*
-}
-
-element_list = _{
-  (value ~ ",")* ~ value
 }
 
 numeric_literal = _{

@@ -53,7 +53,6 @@ fn parse_bool(pair: Pair<Rule>) -> bool {
 }
 
 fn parse_string(pair: Pair<Rule>) -> String {
-    println!("string pair: ({}) {:?}", pair.as_str(), pair);
     pair.into_inner()
         .map(|component| match component.as_rule() {
             Rule::character_literal => String::from(component.as_str()),
