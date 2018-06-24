@@ -52,7 +52,11 @@ fn parse_bool(s: &str) -> bool {
 }
 
 fn parse_string(s: &str) -> String {
-    String::from(s.trim_matches(|c| c == '\'' || c == '"'))
+    if &s[0..1] == "\"" || &s[0..1] == "'" {
+        String::from(&s[1..s.len() - 1])
+    } else {
+        String::from(s)
+    }
 }
 
 fn parse_number(s: &str) -> f64 {

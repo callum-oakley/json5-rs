@@ -168,6 +168,7 @@ identifier_part = _{
 // TODO
 escape_sequence = _{
   "\"" |
+  "\'" |
   "\\"
 }
 
