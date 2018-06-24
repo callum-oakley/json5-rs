@@ -2,7 +2,7 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
-use pest::iterators::Pair;
+use pest::iterators::{Pair, Pairs};
 use pest::{Error, Parser};
 use std::collections::HashMap;
 
@@ -33,28 +33,21 @@ impl Value {
         println!("from_pair:\n\t{:?}", pair);
         match pair.as_rule() {
             Rule::null => Value::Null,
-            Rule::boolean => match pair.as_str() {
-                "true" => Value::Bool(true),
-                "false" => Value::Bool(false),
-                _ => unreachable!(),
-            },
+            Rule::boolean => Value::Bool(parse_bool(pair.as_str())),
             Rule::string => Value::String(parse_string(pair.as_str())),
             Rule::number => Value::Number(parse_number(pair.as_str())),
-            Rule::object => Value::Object(
-                pair.into_inner()
-                    .map(|member| {
-                        let mut pairs = member.into_inner();
-                        let key = parse_string(pairs.next().unwrap().as_str());
-                        let value = Value::from_pair(pairs.next().unwrap());
-                        (key, value)
-                    })
-                    .collect(),
-            ),
-            Rule::array => {
-                Value::Array(pair.into_inner().map(Value::from_pair).collect())
-            }
+            Rule::object => Value::Object(parse_object(pair.into_inner())),
+            Rule::array => Value::Array(parse_array(pair.into_inner())),
             _ => unreachable!(),
         }
+    }
+}
+
+fn parse_bool(s: &str) -> bool {
+    match s {
+        "true" => true,
+        "false" => false,
+        _ => unreachable!(),
     }
 }
 
@@ -68,4 +61,19 @@ fn parse_number(s: &str) -> f64 {
     } else {
         s.parse().unwrap()
     }
+}
+
+fn parse_object(members: Pairs<Rule>) -> HashMap<String, Value> {
+    members
+        .map(|member| {
+            let mut pairs = member.into_inner();
+            let key = parse_string(pairs.next().unwrap().as_str());
+            let value = Value::from_pair(pairs.next().unwrap());
+            (key, value)
+        })
+        .collect()
+}
+
+fn parse_array(elements: Pairs<Rule>) -> Vec<Value> {
+    elements.map(Value::from_pair).collect()
 }
