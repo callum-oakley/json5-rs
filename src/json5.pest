@@ -23,7 +23,7 @@ boolean = @{
   "false"
 }
 
-string = @{
+string = ${
   "\"" ~ double_string_character* ~ "\"" |
   "'" ~ single_string_character* ~ "'"
 }
@@ -121,19 +121,19 @@ hex_digit = _{
 }
 
 double_string_character = _{
-  "\u{2028}" |
-  "\u{2029}" |
   "\\" ~ escape_sequence |
   line_continuation |
-  !("\"" | "\\" | line_terminator) ~ any
+  !"\"" ~ character_literal
 }
 
 single_string_character = _{
-  "\u{2028}" |
-  "\u{2029}" |
   "\\" ~ escape_sequence |
   line_continuation |
-  !("'" | "\\" | line_terminator) ~ any
+  !"'" ~ character_literal
+}
+
+character_literal = @{
+  !("\\" | line_terminator) ~ any
 }
 
 line_continuation = _{
@@ -158,7 +158,7 @@ identifier_start = _{
   'A'..'Z' |
   "$" |
   "_" |
-  "\\" ~ unicode_escape_sequence
+  "\\u" ~ unicode_escape_sequence
 }
 
 // TODO
@@ -169,12 +169,16 @@ identifier_part = _{
 
 escape_sequence = _{
   character_escape_sequence |
-  "0" |
-  hex_escape_sequence |
-  unicode_escape_sequence
+  nul_escape_sequence |
+  "x" ~ hex_escape_sequence |
+  "u" ~ unicode_escape_sequence
 }
 
-character_escape_sequence = _{
+nul_escape_sequence = @{
+  "0"
+}
+
+character_escape_sequence = @{
   single_escape_character |
   non_escape_character
 }
@@ -202,12 +206,12 @@ escape_character = _{
   "u"
 }
 
-hex_escape_sequence = _{
-  "x" ~ hex_digit{2}
+hex_escape_sequence = @{
+  hex_digit{2}
 }
 
-unicode_escape_sequence = _{
-  "u" ~ hex_digit{4}
+unicode_escape_sequence = @{
+  hex_digit{4}
 }
 
 whitespace = _{

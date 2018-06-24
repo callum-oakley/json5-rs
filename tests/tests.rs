@@ -248,7 +248,7 @@ fn parses_nested_quotes_strings() {
 
 #[test]
 fn parses_escaped_characters() {
-    parses_to("'\\b\\f\\n\\r\\t\\v\\0\\x0f\\u01fF\\\n\\\r\n\\\r\\\u{2028}\\\u{2029}\\a\\'\\\"'", V::String(String::from("\u{0008}\u{000C}\n\r\t\u{000B}\0\x0f\u{01fF}\\a'\"")));
+    parses_to("'\\b\\f\\n\\r\\t\\v\\0\\x0f\\u01fF\\\n\\\r\n\\\r\\\u{2028}\\\u{2029}\\a\\'\\\"'", V::String(String::from("\u{0008}\u{000C}\n\r\t\u{000B}\0\x0f\u{01FF}a'\"")));
 }
 
 // comments
