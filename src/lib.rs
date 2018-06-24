@@ -14,6 +14,7 @@ const _GRAMMAR: &str = include_str!("json5.pest");
 #[grammar = "json5.pest"]
 struct Json5Parser;
 
+/// Represents any valid JSON5 value.
 #[derive(Debug, PartialEq)]
 pub enum Value {
     Null,
@@ -87,7 +88,7 @@ fn parse_number(pair: Pair<Rule>) -> f64 {
         "Infinity" => INFINITY,
         "-Infinity" => NEG_INFINITY,
         "NaN" | "-NaN" => NAN,
-        s if s.len() > 2 && &s[..2] == "0x" => parse_hex(&s[2..]) as f64, // TODO 0X
+        s if is_hex_literal(s) => parse_hex(&s[2..]) as f64,
         s => s.parse().unwrap(),
     }
 }
@@ -109,4 +110,8 @@ fn parse_array(pair: Pair<Rule>) -> Vec<Value> {
 
 fn parse_hex(s: &str) -> u32 {
     u32::from_str_radix(s, 16).unwrap()
+}
+
+fn is_hex_literal(s: &str) -> bool {
+    s.len() > 2 && (&s[..2] == "0x" || &s[..2] == "0X")
 }
