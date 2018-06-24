@@ -51,7 +51,7 @@ fn parses_special_character_property_names() {
     let mut m = HashMap::new();
     m.insert(String::from("$_"), V::Number(1.));
     m.insert(String::from("_$"), V::Number(2.));
-    m.insert(String::from("\u{200C}"), V::Number(3.));
+    m.insert(String::from("a\u{200C}"), V::Number(3.));
     parses_to("{$_:1,_$:2,a\u{200C}:3}", V::Object(m));
 }
 

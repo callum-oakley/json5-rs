@@ -53,9 +53,9 @@ fn parse_bool(s: &str) -> bool {
 
 fn parse_string(s: &str) -> String {
     if &s[0..1] == "\"" || &s[0..1] == "'" {
-        String::from(&s[1..s.len() - 1])
+        escape(&s[1..s.len() - 1])
     } else {
-        String::from(s)
+        escape(s)
     }
 }
 
@@ -86,4 +86,9 @@ fn parse_array(elements: Pairs<Rule>) -> Vec<Value> {
 
 fn parse_hex(s: &str) -> f64 {
     i64::from_str_radix(&s[2..], 16).unwrap() as f64
+}
+
+fn escape(s: &str) -> String {
+    // TODO escapes should be a sub-rule of string
+    String::from(s)
 }
