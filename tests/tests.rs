@@ -2,10 +2,18 @@ extern crate json5_parser;
 
 use json5_parser::Value as V;
 use std::collections::HashMap;
-use std::f64::{INFINITY, NAN};
+use std::f64::{INFINITY, NEG_INFINITY};
 
 fn parses_to(s: &str, v: V) {
     assert_eq!(V::from_str(s), Ok(v));
+}
+
+fn parses_to_nan(s: &str) {
+    if let V::Number(n) = V::from_str(s).unwrap() {
+        assert_eq!(n.is_nan(), true)
+    } else {
+        panic!("expected Value::Number")
+    }
 }
 
 // The following tests are adapted from https://github.com/json5/json5/blob/d828908384ce8dc40d8dde017ae82afd1b952d79/test/parse.js
@@ -205,14 +213,14 @@ fn parses_hexadecimal_numbers() {
 fn parses_signed_and_unsiged_infinity() {
     parses_to(
         "[Infinity,-Infinity]",
-        V::Array(vec![V::Number(INFINITY), V::Number(-INFINITY)]),
+        V::Array(vec![V::Number(INFINITY), V::Number(NEG_INFINITY)]),
     );
 }
 
 #[test]
 fn parses_signed_and_unsigned_nan() {
-    parses_to("NaN", V::Number(NAN));
-    parses_to("-NaN", V::Number(NAN));
+    parses_to_nan("NaN");
+    parses_to_nan("-NaN");
 }
 
 // strings

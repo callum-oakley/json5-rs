@@ -31,7 +31,6 @@ impl Value {
     }
 
     fn from_pair(pair: Pair<Rule>) -> Value {
-        println!("from_pair:\n\t{:?}", pair);
         match pair.as_rule() {
             Rule::null => Value::Null,
             Rule::boolean => Value::Bool(parse_bool(pair.as_str())),
