@@ -37,16 +37,14 @@ impl Value {
                 "false" => Value::Bool(false),
                 _ => unreachable!(),
             },
-            Rule::string => {
-                Value::String(String::from(pair.as_str())) // TODO strip ' and "
-            }
+            Rule::string => Value::String(trim_quotes(pair.as_str())),
             Rule::number => Value::Number(pair.as_str().parse().unwrap()),
             Rule::object => Value::Object(
                 pair.into_inner()
                     .map(|member| {
                         println!("MEMBER: {:?}", member);
                         let mut pairs = member.into_inner();
-                        let key = String::from(pairs.next().unwrap().as_str());
+                        let key = trim_quotes(pairs.next().unwrap().as_str());
                         let value = Value::from_pair(pairs.next().unwrap());
                         (key, value)
                     })
@@ -58,4 +56,8 @@ impl Value {
             _ => unreachable!(),
         }
     }
+}
+
+fn trim_quotes(s: &str) -> String {
+    String::from(s.trim_matches(|c| c == '\'' || c == '"'))
 }

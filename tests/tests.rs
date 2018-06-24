@@ -240,7 +240,7 @@ fn parses_nested_quotes_strings() {
 
 #[test]
 fn parses_escaped_characters() {
-    parses_to("'\\\\'", V::String(String::from("\\")));
+    parses_to("'\\b\\f\\n\\r\\t\\v\\0\\x0f\\u01fF\\\n\\\r\n\\\r\\\u{2028}\\\u{2029}\\a\\'\\\"'", V::String(String::from("\u{0008}\u{000C}\n\r\t\u{000B}\0\x0f\u{01fF}\\a'\"")));
 }
 
 // comments
@@ -262,5 +262,8 @@ fn parses_multi_line_comments() {
 
 #[test]
 fn parses_whitespace() {
-    parses_to("{    \t\t  \r\n \t     \n }\n", V::Object(HashMap::new()));
+    parses_to(
+        "{\t\u{000B}\u{000C} \u{00A0}\u{FEFF}\n\r\u{2028}\u{2029}\u{2003}}",
+        V::Object(HashMap::new()),
+    );
 }

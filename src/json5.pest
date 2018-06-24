@@ -35,17 +35,13 @@ number = @{
 }
 
 object = {
-  "{" ~ key_value_pairs ~ ","? ~ "}" |
-  "{" ~ "}"
+  "{" ~ "}" |
+  "{" ~ key_value_pairs ~ ","? ~ "}"
 }
 
 array = {
-  "[" ~ element_list ~ ","? ~ "]" |
-  "[" ~ "]"
-}
-
-identifier = {
-  identifier_start ~ (identifier_part)*
+  "[" ~ "]" |
+  "[" ~ element_list ~ ","? ~ "]"
 }
 
 key_value_pairs = _{
@@ -59,6 +55,10 @@ key_value_pair = {
 key = _{
   identifier |
   string
+}
+
+identifier = @{
+  identifier_start ~ (identifier_part)*
 }
 
 element_list = _{
@@ -172,11 +172,10 @@ escape_sequence = _{
 }
 
 whitespace = _{
+  line_terminator_sequence |
   "\u{0009}" |
-  "\u{000A}" |
   "\u{000B}" |
   "\u{000C}" |
-  "\u{000D}" |
   "\u{0020}" |
   "\u{00A0}" |
   "\u{1680}" |
@@ -191,7 +190,6 @@ whitespace = _{
   "\u{2008}" |
   "\u{2009}" |
   "\u{200A}" |
-  "\u{2028}" |
   "\u{202F}" |
   "\u{205F}" |
   "\u{3000}" |
