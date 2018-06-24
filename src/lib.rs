@@ -2,12 +2,11 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
-use pest::iterators::{Pair, Pairs};
+use pest::iterators::Pair;
 use pest::{Error, Parser};
 use std::char;
 use std::collections::HashMap;
 use std::f64::{INFINITY, NAN, NEG_INFINITY};
-use std::str::FromStr;
 
 const _GRAMMAR: &str = include_str!("json5.pest");
 
@@ -54,7 +53,7 @@ fn parse_bool(pair: Pair<Rule>) -> bool {
 }
 
 fn parse_string(pair: Pair<Rule>) -> String {
-    println!("string pair: {:?}", pair);
+    println!("string pair: ({}) {:?}", pair.as_str(), pair);
     pair.into_inner()
         .map(|component| match component.as_rule() {
             Rule::character_literal => String::from(component.as_str()),
@@ -98,13 +97,7 @@ fn parse_object(pair: Pair<Rule>) -> HashMap<String, Value> {
     pair.into_inner()
         .map(|member| {
             let mut pairs = member.into_inner();
-            let key_pair = pairs.next().unwrap();
-            println!("{:?}", key_pair);
-            let key = match key_pair.as_rule() {
-                Rule::string => parse_string(key_pair),
-                Rule::identifier => String::from(key_pair.as_str()),
-                _ => unreachable!(),
-            };
+            let key = parse_string(pairs.next().unwrap());
             let value = Value::from_pair(pairs.next().unwrap());
             (key, value)
         })
