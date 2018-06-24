@@ -14,11 +14,11 @@ value = _{
   array
 }
 
-null = {
+null = @{
   "null"
 }
 
-boolean = {
+boolean = @{
   "true" |
   "false"
 }
@@ -66,8 +66,8 @@ element_list = _{
 }
 
 numeric_literal = _{
-  decimal_literal |
   hex_integer_literal |
+  decimal_literal |
   "Infinity" |
   "NaN"
 }

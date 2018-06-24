@@ -30,6 +30,7 @@ impl Value {
     }
 
     fn from_pair(pair: Pair<Rule>) -> Value {
+        println!("from_pair:\n\t{:?}", pair);
         match pair.as_rule() {
             Rule::null => Value::Null,
             Rule::boolean => match pair.as_str() {
@@ -37,14 +38,13 @@ impl Value {
                 "false" => Value::Bool(false),
                 _ => unreachable!(),
             },
-            Rule::string => Value::String(trim_quotes(pair.as_str())),
-            Rule::number => Value::Number(pair.as_str().parse().unwrap()),
+            Rule::string => Value::String(parse_string(pair.as_str())),
+            Rule::number => Value::Number(parse_number(pair.as_str())),
             Rule::object => Value::Object(
                 pair.into_inner()
                     .map(|member| {
-                        println!("MEMBER: {:?}", member);
                         let mut pairs = member.into_inner();
-                        let key = trim_quotes(pairs.next().unwrap().as_str());
+                        let key = parse_string(pairs.next().unwrap().as_str());
                         let value = Value::from_pair(pairs.next().unwrap());
                         (key, value)
                     })
@@ -58,6 +58,14 @@ impl Value {
     }
 }
 
-fn trim_quotes(s: &str) -> String {
+fn parse_string(s: &str) -> String {
     String::from(s.trim_matches(|c| c == '\'' || c == '"'))
+}
+
+fn parse_number(s: &str) -> f64 {
+    if s.len() > 2 && &s[..2] == "0x" {
+        i64::from_str_radix(&s[2..], 16).unwrap() as f64
+    } else {
+        s.parse().unwrap()
+    }
 }
