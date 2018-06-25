@@ -5,7 +5,10 @@ use std::collections::HashMap;
 use std::f64::{INFINITY, NEG_INFINITY};
 
 fn parses_to(s: &str, v: V) {
-    assert_eq!(V::from_str(s), Ok(v));
+    match V::from_str(s) {
+        Ok(value) => assert_eq!(value, v),
+        Err(err) => panic!(format!("{}", err)),
+    }
 }
 
 fn parses_to_nan(s: &str) {
@@ -47,7 +50,6 @@ fn parses_unquoted_property_names() {
 }
 
 #[test]
-#[ignore] // Pending proper unicode support
 fn parses_special_character_property_names() {
     let mut m = HashMap::new();
     m.insert(String::from("$_"), V::Number(1.));
@@ -57,7 +59,6 @@ fn parses_special_character_property_names() {
 }
 
 #[test]
-#[ignore] // Pending proper unicode support
 fn parses_unicode_property_names() {
     let mut m = HashMap::new();
     m.insert(String::from("ùńîċõďë"), V::Number(9.));

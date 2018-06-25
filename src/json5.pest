@@ -54,7 +54,7 @@ key = _{
 }
 
 identifier = ${
-  identifier_start ~ (identifier_part)*
+  identifier_start ~ identifier_part*
 }
 
 numeric_literal = _{
@@ -65,26 +65,14 @@ numeric_literal = _{
 }
 
 decimal_literal = _{
-  decimal_integer_literal ~ "." ~ decimal_digits? ~ exponent_part? |
-  "." ~ decimal_digits ~ exponent_part? |
+  decimal_integer_literal ~ "." ~ ASCII_DIGIT* ~ exponent_part? |
+  "." ~ ASCII_DIGIT+~ exponent_part? |
   decimal_integer_literal ~ exponent_part?
 }
 
 decimal_integer_literal = _{
   "0" |
-  non_zero_digit ~ decimal_digits?
-}
-
-decimal_digits = _{
-  decimal_digit+
-}
-
-decimal_digit = _{
-  '0'..'9'
-}
-
-non_zero_digit = _{
-  '1'..'9'
+  ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*
 }
 
 exponent_part = _{
@@ -96,20 +84,14 @@ exponent_indicator = _{
 }
 
 signed_integer = _{
-  decimal_digits |
-  "+" ~ decimal_digits |
-  "-" ~ decimal_digits
+  ASCII_DIGIT+ |
+  "+" ~ ASCII_DIGIT+ |
+  "-" ~ ASCII_DIGIT+
 }
 
 hex_integer_literal = _{
-  "0x" ~ hex_digit+ |
-  "0X" ~ hex_digit+
-}
-
-hex_digit = _{
-  '0'..'9' |
-  'a'..'f' |
-  'A'..'F'
+  "0x" ~ ASCII_HEX_DIGIT+ |
+  "0X" ~ ASCII_HEX_DIGIT+
 }
 
 double_string_character = _{
@@ -144,16 +126,30 @@ line_terminator = _{
   "\u{2029}"
 }
 
-// TODO
 identifier_start = _{
-  &('a'..'z' | 'A'..'Z' | "$" | "_") ~ character_literal |
+  &(unicode_letter | "$" | "_") ~ character_literal |
   "\\u" ~ unicode_escape_sequence
 }
 
-// TODO
 identifier_part = _{
   identifier_start |
-  &('0'..'9') ~ character_literal
+  &(
+    NONSPACING_MARK |
+    DIACRITIC | // not sure about this one, spec says "Combining spacing mark (Mc)"
+    DECIMAL_NUMBER |
+    CONNECTOR_PUNCTUATION |
+    "\u{200C}" |
+    "\u{200D}"
+  ) ~ character_literal
+}
+
+unicode_letter = _{
+  UPPERCASE_LETTER |
+  LOWERCASE_LETTER |
+  TITLECASE_LETTER |
+  MODIFIER_LETTER |
+  OTHER_LETTER |
+  LETTER_NUMBER
 }
 
 escape_sequence = _{
@@ -190,42 +186,28 @@ non_escape_character = _{
 
 escape_character = _{
   single_escape_character |
-  decimal_digit |
+  ASCII_DIGIT |
   "x" |
   "u"
 }
 
 hex_escape_sequence = @{
-  hex_digit{2}
+  ASCII_HEX_DIGIT{2}
 }
 
 unicode_escape_sequence = @{
-  hex_digit{4}
+  ASCII_HEX_DIGIT{4}
 }
 
 WHITESPACE = _{
-  line_terminator_sequence |
   "\u{0009}" |
   "\u{000B}" |
   "\u{000C}" |
   "\u{0020}" |
   "\u{00A0}" |
-  "\u{1680}" |
-  "\u{2000}" |
-  "\u{2001}" |
-  "\u{2002}" |
-  "\u{2003}" |
-  "\u{2004}" |
-  "\u{2005}" |
-  "\u{2006}" |
-  "\u{2007}" |
-  "\u{2008}" |
-  "\u{2009}" |
-  "\u{200A}" |
-  "\u{202F}" |
-  "\u{205F}" |
-  "\u{3000}" |
-  "\u{FEFF}"
+  "\u{FEFF}" |
+  SPACE_SEPARATOR |
+  line_terminator
 }
 
 COMMENT = _{
