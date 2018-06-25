@@ -2,7 +2,7 @@
 // https://spec.json5.org/#lexical-grammar
 
 text = _{
-  soi ~ value ~ eoi
+  SOI ~ value ~ EOI
 }
 
 value = _{
@@ -125,7 +125,7 @@ single_string_character = _{
 }
 
 character_literal = @{
-  !("\\" | line_terminator) ~ any
+  !("\\" | line_terminator) ~ ANY
 }
 
 line_continuation = _{
@@ -185,7 +185,7 @@ single_escape_character = _{
 }
 
 non_escape_character = _{
-  !(escape_character | line_terminator) ~ any
+  !(escape_character | line_terminator) ~ ANY
 }
 
 escape_character = _{
@@ -203,7 +203,7 @@ unicode_escape_sequence = @{
   hex_digit{4}
 }
 
-whitespace = _{
+WHITESPACE = _{
   line_terminator_sequence |
   "\u{0009}" |
   "\u{000B}" |
@@ -228,7 +228,7 @@ whitespace = _{
   "\u{FEFF}"
 }
 
-comment = _{
-  "/*" ~ (!"*/" ~ any)* ~ "*/" |
-  "//" ~ (!line_terminator ~ any)*
+COMMENT = _{
+  "/*" ~ (!"*/" ~ ANY)* ~ "*/" |
+  "//" ~ (!line_terminator ~ ANY)*
 }

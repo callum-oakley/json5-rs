@@ -4,5 +4,5 @@ version = "0.1.0"
 authors = ["Callum Oakley <c.oakley108@gmail.com>"]
 
 [dependencies]
-pest = "*"
-pest_derive = "*"
+pest = { git = "https://github.com/pest-parser/pest" }
+pest_derive = { git = "https://github.com/pest-parser/pest" }

@@ -2,8 +2,9 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
+use pest::error::Error;
 use pest::iterators::Pair;
-use pest::{Error, Parser};
+use pest::Parser;
 use std::char;
 use std::collections::HashMap;
 use std::f64::{INFINITY, NAN, NEG_INFINITY};
