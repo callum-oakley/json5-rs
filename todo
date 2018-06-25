@@ -1,4 +1,2 @@
-- switch to master and make use of https://github.com/pest-parser/pest/pull/247
-  for unicode support
-
 - use serde
+- binary which parses json5 and spits out json
