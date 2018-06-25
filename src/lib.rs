@@ -57,10 +57,8 @@ fn parse_bool(pair: Pair<Rule>) -> bool {
 fn parse_string(pair: Pair<Rule>) -> String {
     pair.into_inner()
         .map(|component| match component.as_rule() {
-            Rule::character_literal => String::from(component.as_str()),
-            Rule::character_escape_sequence => {
-                parse_character_escape_sequence(component)
-            }
+            Rule::char_literal => String::from(component.as_str()),
+            Rule::char_escape_sequence => parse_char_escape_sequence(component),
             Rule::nul_escape_sequence => String::from("\u{0000}"),
             Rule::hex_escape_sequence | Rule::unicode_escape_sequence => {
                 char::from_u32(parse_hex(component.as_str()))
@@ -72,7 +70,7 @@ fn parse_string(pair: Pair<Rule>) -> String {
         .collect()
 }
 
-fn parse_character_escape_sequence(pair: Pair<Rule>) -> String {
+fn parse_char_escape_sequence(pair: Pair<Rule>) -> String {
     String::from(match pair.as_str() {
         "b" => "\u{0008}",
         "f" => "\u{000C}",
