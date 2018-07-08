@@ -144,3 +144,36 @@ impl<'de> SeqAccess<'de> for Access<'de> {
         }
     }
 }
+
+#[test]
+fn test_null() {
+    assert_eq!(from_str("null"), Ok(()));
+}
+
+#[test]
+fn test_bool() {
+    assert_eq!(from_str("true"), Ok(true));
+    assert_eq!(from_str("false"), Ok(false));
+}
+
+#[test]
+fn test_string() {
+    assert_eq!(from_str("\"true\""), Ok(String::from("true")));
+    assert_eq!(
+        from_str("'a string! with a double quote (\") in it'"),
+        Ok(String::from("a string! with a double quote (\") in it"))
+    );
+}
+
+#[test]
+fn test_number() {
+    assert_eq!(from_str("42"), Ok(42.))
+}
+
+#[test]
+fn test_array() {
+    assert_eq!(
+        from_str("[[1, 2], [3], []]"),
+        Ok(vec![vec![1., 2.], vec![3.], vec![]])
+    )
+}
