@@ -95,7 +95,7 @@ numeric_literal = _{
 
 object = { "{" ~ "}" | "{" ~ pair ~ ("," ~ pair)* ~ ","? ~ "}" }
 
-pair = { key ~ ":" ~ value }
+pair = _{ key ~ ":" ~ value }
 
 single_escape_char = _{ "'" | "\"" | "\\" | "b" | "f" | "n" | "r" | "t" | "v" }
 
