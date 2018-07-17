@@ -7,9 +7,14 @@ use de::Rule;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+// TODO figure out how to actually organise these
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
     Message(String),
+    NotAnEnum,
+    NotATuple,
+    NotAStruct,
     Parse(pest::error::Error<Rule>),
 }
 
@@ -42,7 +47,10 @@ impl std::error::Error for Error {
     fn description(&self) -> &str {
         match *self {
             Error::Message(ref msg) => msg,
-            Error::Parse(_) => "parsing error!", // TODO display error!
+            Error::NotAnEnum => unimplemented!(),  // TODO
+            Error::NotATuple => unimplemented!(),  // TODO
+            Error::NotAStruct => unimplemented!(), // TODO
+            Error::Parse(_) => "parsing error!",   // TODO display error!
         }
     }
 }

@@ -1,11 +1,10 @@
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use serde::de::{
-    Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
+    Deserialize, DeserializeSeed, Deserializer, EnumAccess, MapAccess, SeqAccess, VariantAccess,
+    Visitor,
 };
 use std::char;
-#[cfg(test)]
-use std::collections::HashMap;
 use std::f64::{INFINITY, NAN, NEG_INFINITY};
 
 use error::{Error, Result};
@@ -50,14 +49,30 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
         match pair.as_rule() {
             Rule::null => visitor.visit_unit(),
             Rule::boolean => visitor.visit_bool(parse_bool(pair)),
-            Rule::string | Rule::identifier => {
-                visitor.visit_string(parse_string(pair))
-            }
+            Rule::string | Rule::identifier => visitor.visit_string(parse_string(pair)),
             Rule::number => visitor.visit_f64(parse_number(pair)),
-            Rule::array => visitor.visit_seq(Access::to(pair.into_inner())),
-            Rule::object => visitor.visit_map(Access::to(pair.into_inner())),
+            Rule::array => visitor.visit_seq(Seq {
+                pairs: pair.into_inner(),
+            }),
+            Rule::object => visitor.visit_map(Map {
+                pairs: pair.into_inner(),
+            }),
             _ => unreachable!(),
         }
+    }
+
+    fn deserialize_enum<V>(
+        self,
+        _name: &'static str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_enum(Enum {
+            pair: self.pair.take().unwrap(),
+        })
     }
 
     // The below will get us the right types, but won't necessarily give
@@ -158,10 +173,10 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
         visitor.visit_f64(parse_number(pair))
     }
 
-    // TODO Probably don't want to forward enum, struct, etc...
+    // TODO test that all these work and manually fix any that don't
     forward_to_deserialize_any! {
         bool char str string bytes byte_buf option unit unit_struct
-        newtype_struct seq tuple tuple_struct map struct enum identifier
+        newtype_struct seq tuple tuple_struct map struct identifier
         ignored_any
     }
 }
@@ -180,11 +195,10 @@ fn parse_string(pair: Pair<Rule>) -> String {
             Rule::char_literal => String::from(component.as_str()),
             Rule::char_escape_sequence => parse_char_escape_sequence(component),
             Rule::nul_escape_sequence => String::from("\u{0000}"),
-            Rule::hex_escape_sequence | Rule::unicode_escape_sequence => {
-                char::from_u32(parse_hex(component.as_str()))
-                    .unwrap()
-                    .to_string()
-            }
+            Rule::hex_escape_sequence | Rule::unicode_escape_sequence => char::from_u32(parse_hex(
+                component.as_str(),
+            )).unwrap()
+                .to_string(),
             _ => unreachable!(),
         })
         .collect()
@@ -220,17 +234,11 @@ fn is_hex_literal(s: &str) -> bool {
     s.len() > 2 && (&s[..2] == "0x" || &s[..2] == "0X")
 }
 
-struct Access<'de> {
+struct Seq<'de> {
     pairs: Pairs<'de, Rule>,
 }
 
-impl<'de> Access<'de> {
-    fn to(pairs: Pairs<'de, Rule>) -> Self {
-        Access { pairs }
-    }
-}
-
-impl<'de> SeqAccess<'de> for Access<'de> {
+impl<'de> SeqAccess<'de> for Seq<'de> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
@@ -246,7 +254,11 @@ impl<'de> SeqAccess<'de> for Access<'de> {
     }
 }
 
-impl<'de> MapAccess<'de> for Access<'de> {
+struct Map<'de> {
+    pairs: Pairs<'de, Rule>,
+}
+
+impl<'de> MapAccess<'de> for Map<'de> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
@@ -265,51 +277,157 @@ impl<'de> MapAccess<'de> for Access<'de> {
     where
         V: DeserializeSeed<'de>,
     {
-        if let Some(pair) = self.pairs.next() {
-            seed.deserialize(&mut Json5Deserializer::from_pair(pair))
-        } else {
-            unreachable!()
+        seed.deserialize(&mut Json5Deserializer::from_pair(
+            self.pairs.next().unwrap(),
+        ))
+    }
+}
+
+struct Enum<'de> {
+    pair: Pair<'de, Rule>,
+}
+
+impl<'de> EnumAccess<'de> for Enum<'de> {
+    type Error = Error;
+    type Variant = Variant<'de>;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        match self.pair.as_rule() {
+            Rule::string => {
+                let tag = seed.deserialize(&mut Json5Deserializer::from_pair(self.pair))?;
+                Ok((tag, Variant(None)))
+            }
+            Rule::object => {
+                let mut pairs = self.pair.into_inner();
+
+                if let Some(tag_pair) = pairs.next() {
+                    let tag = seed.deserialize(&mut Json5Deserializer::from_pair(tag_pair))?;
+                    Ok((tag, Variant(Some(pairs.next().unwrap()))))
+                } else {
+                    Err(Error::NotAnEnum)
+                }
+            }
+            _ => Err(Error::NotAnEnum),
         }
     }
 }
 
-#[test]
-fn test_null() {
-    assert_eq!(from_str("null"), Ok(()));
+struct Variant<'de>(Option<Pair<'de, Rule>>);
+
+impl<'de> Variant<'de> {
+    fn unwrap(self) -> Pair<'de, Rule> {
+        match self {
+            Variant(Some(pair)) => pair,
+            _ => panic!("tried to unwrap empty variant!"),
+        }
+    }
 }
 
-#[test]
-fn test_bool() {
-    assert_eq!(from_str("true"), Ok(true));
-    assert_eq!(from_str("false"), Ok(false));
+impl<'de, 'a> VariantAccess<'de> for Variant<'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<()> {
+        Ok(())
+    }
+
+    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
+    where
+        T: DeserializeSeed<'de>,
+    {
+        seed.deserialize(&mut Json5Deserializer::from_pair(self.unwrap()))
+    }
+
+    fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        let pair = self.unwrap();
+        match pair.as_rule() {
+            Rule::array => visitor.visit_seq(Seq {
+                pairs: pair.into_inner(),
+            }),
+            _ => Err(Error::NotATuple),
+        }
+    }
+
+    fn struct_variant<V>(self, _fields: &'static [&'static str], visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        let pair = self.unwrap();
+        match pair.as_rule() {
+            Rule::object => visitor.visit_map(Map {
+                pairs: pair.into_inner(),
+            }),
+            _ => Err(Error::NotAStruct),
+        }
+    }
 }
 
-#[test]
-fn test_string() {
-    assert_eq!(from_str("\"true\""), Ok(String::from("true")));
-    assert_eq!(
-        from_str("'a string! with a double quote (\") in it'"),
-        Ok(String::from("a string! with a double quote (\") in it"))
-    );
-}
+#[cfg(test)]
+mod tests {
+    use super::from_str;
 
-#[test]
-fn test_number() {
-    assert_eq!(from_str("0x00000F"), Ok(15))
-}
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct S {
+        a: i32,
+        b: i32,
+    }
 
-#[test]
-fn test_array() {
-    assert_eq!(
-        from_str("[[1, 2], [3], []]"),
-        Ok(vec![vec![1, 2], vec![3], vec![]])
-    )
-}
+    #[derive(Deserialize, PartialEq, Debug)]
+    enum E {
+        A,
+        B(i32),
+        C(i32, i32),
+        D { a: i32, b: i32 },
+    }
 
-#[test]
-fn test_object() {
-    let mut m = HashMap::new();
-    m.insert(String::from("one"), 1);
-    m.insert(String::from("two"), 2);
-    assert_eq!(from_str("{ one: 1, two: 2 }"), Ok(m))
+    #[test]
+    fn test_null() {
+        assert_eq!(from_str("null"), Ok(()));
+    }
+
+    #[test]
+    fn test_bool() {
+        assert_eq!(from_str("true"), Ok(true));
+        assert_eq!(from_str("false"), Ok(false));
+    }
+
+    #[test]
+    fn test_string() {
+        assert_eq!(from_str("\"true\""), Ok(String::from("true")));
+        assert_eq!(
+            from_str("'a string! with a double quote (\") in it'"),
+            Ok(String::from("a string! with a double quote (\") in it"))
+        );
+    }
+
+    #[test]
+    fn test_number() {
+        assert_eq!(from_str("0x00000F"), Ok(15));
+    }
+
+    #[test]
+    fn test_array() {
+        assert_eq!(
+            from_str("[[1, 2], [3], []]"),
+            Ok(vec![vec![1, 2], vec![3], vec![]])
+        );
+    }
+
+    #[test]
+    fn test_object() {
+        assert_eq!(from_str("{ a: 1, b: 2 }"), Ok(S { a: 1, b: 2 }));
+    }
+
+    #[test]
+    fn test_enum() {
+        assert_eq!(from_str("'A'"), Ok(E::A));
+        assert_eq!(from_str("{ B: 2 }"), Ok(E::B(2)));
+        assert_eq!(from_str("{ C: [3, 5] }"), Ok(E::C(3, 5)));
+        assert_eq!(from_str("{ D: { a: 7, b: 11 } }"), Ok(E::D { a: 7, b: 11 }));
+    }
 }
