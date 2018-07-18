@@ -298,14 +298,14 @@ impl<'de> EnumAccess<'de> for Enum<'de> {
         match self.pair.as_rule() {
             Rule::string => {
                 let tag = seed.deserialize(&mut Json5Deserializer::from_pair(self.pair))?;
-                Ok((tag, Variant(None)))
+                Ok((tag, Variant { pair: None }))
             }
             Rule::object => {
                 let mut pairs = self.pair.into_inner();
 
                 if let Some(tag_pair) = pairs.next() {
                     let tag = seed.deserialize(&mut Json5Deserializer::from_pair(tag_pair))?;
-                    Ok((tag, Variant(Some(pairs.next().unwrap()))))
+                    Ok((tag, Variant { pair: pairs.next() }))
                 } else {
                     Err(Error::NotAnEnum)
                 }
@@ -315,15 +315,8 @@ impl<'de> EnumAccess<'de> for Enum<'de> {
     }
 }
 
-struct Variant<'de>(Option<Pair<'de, Rule>>);
-
-impl<'de> Variant<'de> {
-    fn unwrap(self) -> Pair<'de, Rule> {
-        match self {
-            Variant(Some(pair)) => pair,
-            _ => panic!("tried to unwrap empty variant!"),
-        }
-    }
+struct Variant<'de> {
+    pair: Option<Pair<'de, Rule>>,
 }
 
 impl<'de, 'a> VariantAccess<'de> for Variant<'de> {
@@ -337,14 +330,14 @@ impl<'de, 'a> VariantAccess<'de> for Variant<'de> {
     where
         T: DeserializeSeed<'de>,
     {
-        seed.deserialize(&mut Json5Deserializer::from_pair(self.unwrap()))
+        seed.deserialize(&mut Json5Deserializer::from_pair(self.pair.unwrap()))
     }
 
     fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        let pair = self.unwrap();
+        let pair = self.pair.unwrap();
         match pair.as_rule() {
             Rule::array => visitor.visit_seq(Seq {
                 pairs: pair.into_inner(),
@@ -357,7 +350,7 @@ impl<'de, 'a> VariantAccess<'de> for Variant<'de> {
     where
         V: Visitor<'de>,
     {
-        let pair = self.unwrap();
+        let pair = self.pair.unwrap();
         match pair.as_rule() {
             Rule::object => visitor.visit_map(Map {
                 pairs: pair.into_inner(),
