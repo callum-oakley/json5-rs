@@ -2,7 +2,7 @@ extern crate json5;
 extern crate serde;
 
 use std::collections::HashMap;
-use std::f64::{INFINITY, NEG_INFINITY};
+use std::f64;
 
 fn parses_to<'a, T>(s: &'a str, v: T)
 where
@@ -174,7 +174,10 @@ fn parses_hexadecimal_numbers() {
 
 #[test]
 fn parses_signed_and_unsiged_infinity() {
-    parses_to("[Infinity,-Infinity]", vec![INFINITY, NEG_INFINITY]);
+    parses_to(
+        "[Infinity,-Infinity]",
+        vec![f64::INFINITY, f64::NEG_INFINITY],
+    );
 }
 
 #[test]
