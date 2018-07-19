@@ -1,11 +1,8 @@
 use pest::iterators::{Pair, Pairs};
-use pest::Parser;
-use serde::de::{
-    Deserialize, DeserializeSeed, Deserializer, EnumAccess, MapAccess, SeqAccess, VariantAccess,
-    Visitor,
-};
+use pest::Parser as P;
+use serde::de;
 use std::char;
-use std::f64::{INFINITY, NAN, NEG_INFINITY};
+use std::f64;
 
 use error::{Error, Result};
 
@@ -13,37 +10,37 @@ const _GRAMMAR: &str = include_str!("json5.pest");
 
 #[derive(Parser)]
 #[grammar = "json5.pest"]
-struct JSON5Parser;
+struct Parser;
 
-pub struct Json5Deserializer<'de> {
+pub struct Deserializer<'de> {
     pair: Option<Pair<'de, Rule>>,
 }
 
-impl<'de> Json5Deserializer<'de> {
+impl<'de> Deserializer<'de> {
     pub fn from_str(input: &'de str) -> Result<Self> {
-        let pair = JSON5Parser::parse(Rule::text, input)?.next().unwrap();
-        Ok(Json5Deserializer::from_pair(pair))
+        let pair = Parser::parse(Rule::text, input)?.next().unwrap();
+        Ok(Deserializer::from_pair(pair))
     }
 
     fn from_pair(pair: Pair<'de, Rule>) -> Self {
-        Json5Deserializer { pair: Some(pair) }
+        Deserializer { pair: Some(pair) }
     }
 }
 
 pub fn from_str<'a, T>(s: &'a str) -> Result<T>
 where
-    T: Deserialize<'a>,
+    T: de::Deserialize<'a>,
 {
-    let mut deserializer = Json5Deserializer::from_str(s)?;
+    let mut deserializer = Deserializer::from_str(s)?;
     T::deserialize(&mut deserializer)
 }
 
-impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
+impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         match pair.as_rule() {
@@ -68,7 +65,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
         visitor: V,
     ) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         visitor.visit_enum(Enum {
             pair: self.pair.take().unwrap(),
@@ -79,7 +76,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
     // meaningful results if the source is out of the range of the target type.
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_i8(parse_number(pair) as i8)
@@ -87,7 +84,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_i16(parse_number(pair) as i16)
@@ -95,7 +92,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_i32(parse_number(pair) as i32)
@@ -103,7 +100,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_i64(parse_number(pair) as i64)
@@ -111,7 +108,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_i128<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_i128(parse_number(pair) as i128)
@@ -119,7 +116,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_u8(parse_number(pair) as u8)
@@ -127,7 +124,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_u16(parse_number(pair) as u16)
@@ -135,7 +132,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_u32(parse_number(pair) as u32)
@@ -143,7 +140,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_u64(parse_number(pair) as u64)
@@ -151,7 +148,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_u128<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_u128(parse_number(pair) as u128)
@@ -159,7 +156,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_f32(parse_number(pair) as f32)
@@ -167,7 +164,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut Json5Deserializer<'de> {
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
         visitor.visit_f64(parse_number(pair))
@@ -218,9 +215,9 @@ fn parse_char_escape_sequence(pair: Pair<Rule>) -> String {
 
 fn parse_number(pair: Pair<Rule>) -> f64 {
     match pair.as_str() {
-        "Infinity" => INFINITY,
-        "-Infinity" => NEG_INFINITY,
-        "NaN" | "-NaN" => NAN,
+        "Infinity" => f64::INFINITY,
+        "-Infinity" => f64::NEG_INFINITY,
+        "NaN" | "-NaN" => f64::NAN,
         s if is_hex_literal(s) => parse_hex(&s[2..]) as f64,
         s => s.parse().unwrap(),
     }
@@ -238,15 +235,15 @@ struct Seq<'de> {
     pairs: Pairs<'de, Rule>,
 }
 
-impl<'de> SeqAccess<'de> for Seq<'de> {
+impl<'de> de::SeqAccess<'de> for Seq<'de> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
     where
-        T: DeserializeSeed<'de>,
+        T: de::DeserializeSeed<'de>,
     {
         if let Some(pair) = self.pairs.next() {
-            seed.deserialize(&mut Json5Deserializer::from_pair(pair))
+            seed.deserialize(&mut Deserializer::from_pair(pair))
                 .map(Some)
         } else {
             Ok(None)
@@ -258,15 +255,15 @@ struct Map<'de> {
     pairs: Pairs<'de, Rule>,
 }
 
-impl<'de> MapAccess<'de> for Map<'de> {
+impl<'de> de::MapAccess<'de> for Map<'de> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
     where
-        K: DeserializeSeed<'de>,
+        K: de::DeserializeSeed<'de>,
     {
         if let Some(pair) = self.pairs.next() {
-            seed.deserialize(&mut Json5Deserializer::from_pair(pair))
+            seed.deserialize(&mut Deserializer::from_pair(pair))
                 .map(Some)
         } else {
             Ok(None)
@@ -275,11 +272,9 @@ impl<'de> MapAccess<'de> for Map<'de> {
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
     where
-        V: DeserializeSeed<'de>,
+        V: de::DeserializeSeed<'de>,
     {
-        seed.deserialize(&mut Json5Deserializer::from_pair(
-            self.pairs.next().unwrap(),
-        ))
+        seed.deserialize(&mut Deserializer::from_pair(self.pairs.next().unwrap()))
     }
 }
 
@@ -287,24 +282,24 @@ struct Enum<'de> {
     pair: Pair<'de, Rule>,
 }
 
-impl<'de> EnumAccess<'de> for Enum<'de> {
+impl<'de> de::EnumAccess<'de> for Enum<'de> {
     type Error = Error;
     type Variant = Variant<'de>;
 
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
     where
-        V: DeserializeSeed<'de>,
+        V: de::DeserializeSeed<'de>,
     {
         match self.pair.as_rule() {
             Rule::string => {
-                let tag = seed.deserialize(&mut Json5Deserializer::from_pair(self.pair))?;
+                let tag = seed.deserialize(&mut Deserializer::from_pair(self.pair))?;
                 Ok((tag, Variant { pair: None }))
             }
             Rule::object => {
                 let mut pairs = self.pair.into_inner();
 
                 if let Some(tag_pair) = pairs.next() {
-                    let tag = seed.deserialize(&mut Json5Deserializer::from_pair(tag_pair))?;
+                    let tag = seed.deserialize(&mut Deserializer::from_pair(tag_pair))?;
                     Ok((tag, Variant { pair: pairs.next() }))
                 } else {
                     Err(Error::NotAnEnum)
@@ -319,7 +314,7 @@ struct Variant<'de> {
     pair: Option<Pair<'de, Rule>>,
 }
 
-impl<'de, 'a> VariantAccess<'de> for Variant<'de> {
+impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {
@@ -328,14 +323,14 @@ impl<'de, 'a> VariantAccess<'de> for Variant<'de> {
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
     where
-        T: DeserializeSeed<'de>,
+        T: de::DeserializeSeed<'de>,
     {
-        seed.deserialize(&mut Json5Deserializer::from_pair(self.pair.unwrap()))
+        seed.deserialize(&mut Deserializer::from_pair(self.pair.unwrap()))
     }
 
     fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.unwrap();
         match pair.as_rule() {
@@ -348,7 +343,7 @@ impl<'de, 'a> VariantAccess<'de> for Variant<'de> {
 
     fn struct_variant<V>(self, _fields: &'static [&'static str], visitor: V) -> Result<V::Value>
     where
-        V: Visitor<'de>,
+        V: de::Visitor<'de>,
     {
         let pair = self.pair.unwrap();
         match pair.as_rule() {

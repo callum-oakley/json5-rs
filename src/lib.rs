@@ -10,5 +10,5 @@ extern crate serde_derive;
 mod de;
 mod error;
 
-pub use de::{from_str, Json5Deserializer as Deserializer};
+pub use de::{from_str, Deserializer};
 pub use error::{Error, Result};
