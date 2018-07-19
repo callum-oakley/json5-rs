@@ -1,5 +1,5 @@
 [package]
-name = "json5-parser"
+name = "json5"
 version = "0.1.0"
 authors = ["Callum Oakley <c.oakley108@gmail.com>"]
 

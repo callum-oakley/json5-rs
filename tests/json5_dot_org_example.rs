@@ -1,4 +1,4 @@
-extern crate json5_parser;
+extern crate json5;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -41,5 +41,5 @@ fn parses_example_from_json5_dot_org() {
         backwards_compatible: "with JSON".to_owned(),
     };
 
-    assert_eq!(json5_parser::from_str(&contents), Ok(expected),);
+    assert_eq!(json5::from_str(&contents), Ok(expected),);
 }
