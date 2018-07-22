@@ -174,7 +174,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        println!("{:?}", self.pair);
         let pair = self.pair.take().unwrap();
         match pair.as_rule() {
             Rule::null => visitor.visit_none(),
@@ -182,9 +181,16 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
+    fn deserialize_newtype_struct<V>(self, _name: &str, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_newtype_struct(self)
+    }
+
     // TODO test that all these work and manually fix any that don't
     forward_to_deserialize_any! {
-        bool char str string bytes byte_buf unit unit_struct newtype_struct seq
+        bool char str string bytes byte_buf unit unit_struct seq
         tuple tuple_struct map struct identifier ignored_any
     }
 }

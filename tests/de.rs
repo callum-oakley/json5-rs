@@ -1,4 +1,6 @@
 extern crate json5;
+#[macro_use]
+extern crate serde_derive;
 
 mod common;
 
@@ -244,4 +246,28 @@ fn parse_option() {
     parses_to::<Option<i32>>("null", None);
     parses_to("42", Some(42));
     parses_to("42", Some(Some(42)));
+}
+
+#[test]
+fn parse_unit() {
+    parses_to("null", ());
+}
+
+#[test]
+fn parse_unit_struct() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct A;
+    parses_to("null", A);
+}
+
+#[test]
+fn parse_newtype_struct() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct A(i32);
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct B(f64);
+
+    parses_to("42", A(42));
+    parses_to("42", B(42.));
 }

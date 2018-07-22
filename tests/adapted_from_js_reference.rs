@@ -1,9 +1,9 @@
 extern crate json5;
 
-mod common;
-
 use std::collections::HashMap;
 use std::f64;
+
+mod common;
 
 use common::{parses_to, parses_to_nan};
 
