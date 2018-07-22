@@ -5,6 +5,10 @@ use std::io::prelude::*;
 #[macro_use]
 extern crate serde_derive;
 
+mod common;
+
+use common::parses_to;
+
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 struct Example {
@@ -41,5 +45,5 @@ fn parses_example_from_json5_dot_org() {
         backwards_compatible: "with JSON".to_owned(),
     };
 
-    assert_eq!(json5::from_str(&contents), Ok(expected),);
+    parses_to(&contents, expected)
 }

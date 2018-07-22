@@ -170,11 +170,22 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_f64(parse_number(pair))
     }
 
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        println!("{:?}", self.pair);
+        let pair = self.pair.take().unwrap();
+        match pair.as_rule() {
+            Rule::null => visitor.visit_none(),
+            _ => visitor.visit_some(&mut Deserializer::from_pair(pair)),
+        }
+    }
+
     // TODO test that all these work and manually fix any that don't
     forward_to_deserialize_any! {
-        bool char str string bytes byte_buf option unit unit_struct
-        newtype_struct seq tuple tuple_struct map struct identifier
-        ignored_any
+        bool char str string bytes byte_buf unit unit_struct newtype_struct seq
+        tuple tuple_struct map struct identifier ignored_any
     }
 }
 

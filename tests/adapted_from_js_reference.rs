@@ -1,25 +1,11 @@
 extern crate json5;
-extern crate serde;
+
+mod common;
 
 use std::collections::HashMap;
 use std::f64;
 
-fn parses_to<'a, T>(s: &'a str, v: T)
-where
-    T: std::fmt::Debug + std::cmp::PartialEq + serde::de::Deserialize<'a>,
-{
-    match json5::from_str::<T>(s) {
-        Ok(value) => assert_eq!(value, v),
-        Err(err) => panic!(format!("{}", err)),
-    }
-}
-
-fn parses_to_nan<'a>(s: &'a str) {
-    match json5::from_str::<f64>(s) {
-        Ok(value) => assert!(value.is_nan()),
-        Err(err) => panic!(format!("{}", err)),
-    }
-}
+use common::{parses_to, parses_to_nan};
 
 // The following tests are adapted from https://github.com/json5/json5/blob/d828908384ce8dc40d8dde017ae82afd1b952d79/test/parse.js
 
