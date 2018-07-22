@@ -188,7 +188,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_newtype_struct(self)
     }
 
-    // TODO test that all these work and manually fix any that don't
     forward_to_deserialize_any! {
         bool char str string bytes byte_buf unit unit_struct seq
         tuple tuple_struct map struct identifier ignored_any
