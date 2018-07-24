@@ -318,10 +318,10 @@ impl<'de> de::EnumAccess<'de> for Enum<'de> {
                     let tag = seed.deserialize(&mut Deserializer::from_pair(tag_pair))?;
                     Ok((tag, Variant { pair: pairs.next() }))
                 } else {
-                    Err(Error::NotAnEnum)
+                    Err(de::Error::custom("expected a nonempty object"))
                 }
             }
-            _ => Err(Error::NotAnEnum),
+            _ => Err(de::Error::custom("expected a string or an object")),
         }
     }
 }
@@ -353,7 +353,7 @@ impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
             Rule::array => visitor.visit_seq(Seq {
                 pairs: pair.into_inner(),
             }),
-            _ => Err(Error::NotATuple),
+            _ => Err(de::Error::custom("expected an array")),
         }
     }
 
@@ -366,7 +366,7 @@ impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
             Rule::object => visitor.visit_map(Map {
                 pairs: pair.into_inner(),
             }),
-            _ => Err(Error::NotAStruct),
+            _ => Err(de::Error::custom("expected an object")),
         }
     }
 }

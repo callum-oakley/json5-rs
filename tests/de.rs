@@ -219,7 +219,7 @@ fn parses_char() {
 }
 
 #[test]
-#[ignore] // currently unsupported
+#[ignore] // TODO currently unsupported
 fn parses_str() {
     parses_to("'Hello!'", "Hello!");
     parses_to("\"안녕하세요\"", "안녕하세요");
@@ -232,16 +232,12 @@ fn parses_string() {
 }
 
 #[test]
-#[ignore] // currently unsupported
-fn parses_bytes() {
-    // TODO
-}
+#[ignore] // TODO currently unsupported
+fn parses_bytes() {}
 
 #[test]
-#[ignore] // currently unsupported
-fn parses_byte_buf() {
-    // TODO
-}
+#[ignore] // TODO currently unsupported
+fn parses_byte_buf() {}
 
 #[test]
 fn parses_option() {
