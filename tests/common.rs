@@ -4,7 +4,7 @@ extern crate serde;
 use std::f64;
 
 #[allow(dead_code)]
-pub fn parses_to<'a, T>(s: &'a str, v: T)
+pub fn deserializes_to<'a, T>(s: &'a str, v: T)
 where
     T: ::std::fmt::Debug + ::std::cmp::PartialEq + serde::de::Deserialize<'a>,
 {
@@ -15,9 +15,20 @@ where
 }
 
 #[allow(dead_code)]
-pub fn parses_to_nan<'a>(s: &'a str) {
+pub fn deserializes_to_nan<'a>(s: &'a str) {
     match json5::from_str::<f64>(s) {
         Ok(value) => assert!(value.is_nan()),
+        Err(err) => panic!(format!("{}", err)),
+    }
+}
+
+#[allow(dead_code)]
+pub fn serializes_to<T>(v: T, s: &'static str)
+where
+    T: ::std::fmt::Debug + ::std::cmp::PartialEq + serde::ser::Serialize,
+{
+    match json5::to_string::<T>(&v) {
+        Ok(value) => assert_eq!(value, s),
         Err(err) => panic!(format!("{}", err)),
     }
 }

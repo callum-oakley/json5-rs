@@ -1,4 +1,4 @@
-use serde::ser;
+use serde::ser::{self, Serialize};
 
 use error::{Error, Result};
 
@@ -9,13 +9,23 @@ pub struct Serializer {
 
 pub fn to_string<T>(value: &T) -> Result<String>
 where
-    T: ser::Serialize,
+    T: Serialize,
 {
     let mut serializer = Serializer {
         output: String::new(),
     };
     value.serialize(&mut serializer)?;
     Ok(serializer.output)
+}
+
+impl Serializer {
+    fn call_to_string<T>(&mut self, v: T) -> Result<()>
+    where
+        T: ToString,
+    {
+        self.output += &v.to_string();
+        Ok(())
+    }
 }
 
 impl<'a> ser::Serializer for &'a mut Serializer {
@@ -31,52 +41,61 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeStructVariant = Self;
 
     fn serialize_bool(self, v: bool) -> Result<()> {
-        self.output += if v { "true" } else { "false" };
-        Ok(())
+        self.call_to_string(v)
     }
 
     fn serialize_i8(self, v: i8) -> Result<()> {
-        self.serialize_i64(v as i64)
+        self.call_to_string(v)
     }
 
     fn serialize_i16(self, v: i16) -> Result<()> {
-        self.serialize_i64(v as i64)
+        self.call_to_string(v)
+    }
+
+    fn serialize_i32(self, v: i32) -> Result<()> {
+        self.call_to_string(v)
     }
 
     fn serialize_i64(self, v: i64) -> Result<()> {
-        self.output += v.to_string(); // TODO we can do better than this
-        Ok(())
+        self.call_to_string(v)
     }
 
     fn serialize_u8(self, v: u8) -> Result<()> {
-        self.serialize_u64(v as u64)
+        self.call_to_string(v)
     }
 
     fn serialize_u16(self, v: u16) -> Result<()> {
-        self.serialize_u64(v as u64)
+        self.call_to_string(v)
     }
 
     fn serialize_u32(self, v: u32) -> Result<()> {
-        self.serialize_u64(v as u64)
+        self.call_to_string(v)
     }
 
     fn serialize_u64(self, v: u64) -> Result<()> {
-        self.output += v.to_string(); // TODO we can do better than this
-        Ok(())
+        self.call_to_string(v)
+    }
+
+    fn serialize_f32(self, v: f32) -> Result<()> {
+        self.call_to_string(v)
+    }
+
+    fn serialize_f64(self, v: f64) -> Result<()> {
+        self.call_to_string(v)
     }
 
     fn serialize_char(self, v: char) -> Result<()> {
-        self.serialize_str(v.to_string())
+        self.serialize_str(&v.to_string())
     }
 
     fn serialize_str(self, v: &str) -> Result<()> {
-        self.output += "'";
-        self.output += escape(v);
-        self.output += "'";
+        self.output += "\"";
+        self.output += &escape(v);
+        self.output += "\"";
         Ok(())
     }
 
-    fn serialize_bytes(self, v: &[u8]) -> Result<()> {
+    fn serialize_bytes(self, _v: &[u8]) -> Result<()> {
         unimplemented!() // TODO
     }
 
@@ -86,7 +105,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     fn serialize_some<T>(self, value: &T) -> Result<()>
     where
-        T: ?Sized + ser::Serialize,
+        T: ?Sized + Serialize,
     {
         value.serialize(self)
     }
@@ -111,7 +130,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     fn serialize_newtype_struct<T>(self, _name: &'static str, value: &T) -> Result<()>
     where
-        T: ?Sized + ser::Serialize,
+        T: ?Sized + Serialize,
     {
         value.serialize(self)
     }
@@ -124,7 +143,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         value: &T,
     ) -> Result<()>
     where
-        T: ?Sized + ser::Serialize,
+        T: ?Sized + Serialize,
     {
         self.output += "{";
         variant.serialize(&mut *self)?; // TODO drop the quotes where possible
@@ -187,7 +206,156 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 }
 
-// TODO impl the compound type serialization traits
+impl<'a> ser::SerializeSeq for &'a mut Serializer {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_element<T>(&mut self, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        if !self.output.ends_with('[') {
+            self.output += ",";
+        }
+        value.serialize(&mut **self)
+    }
+
+    fn end(self) -> Result<()> {
+        self.output += "]";
+        Ok(())
+    }
+}
+
+// TODO can we re-use the functions above in the following?
+
+impl<'a> ser::SerializeTuple for &'a mut Serializer {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_element<T>(&mut self, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        ser::SerializeSeq::serialize_element(self, value)
+    }
+
+    fn end(self) -> Result<()> {
+        self.output += "]";
+        Ok(())
+    }
+}
+
+impl<'a> ser::SerializeTupleStruct for &'a mut Serializer {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T>(&mut self, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        if !self.output.ends_with('[') {
+            self.output += ",";
+        }
+        value.serialize(&mut **self)
+    }
+
+    fn end(self) -> Result<()> {
+        self.output += "]";
+        Ok(())
+    }
+}
+
+impl<'a> ser::SerializeTupleVariant for &'a mut Serializer {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T>(&mut self, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        if !self.output.ends_with('[') {
+            self.output += ",";
+        }
+        value.serialize(&mut **self)
+    }
+
+    fn end(self) -> Result<()> {
+        self.output += "]}";
+        Ok(())
+    }
+}
+
+impl<'a> ser::SerializeMap for &'a mut Serializer {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_key<T>(&mut self, key: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        if !self.output.ends_with('{') {
+            self.output += ",";
+        }
+        key.serialize(&mut **self)
+    }
+
+    fn serialize_value<T>(&mut self, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        self.output += ":";
+        value.serialize(&mut **self)
+    }
+
+    fn end(self) -> Result<()> {
+        self.output += "}";
+        Ok(())
+    }
+}
+
+impl<'a> ser::SerializeStruct for &'a mut Serializer {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        if !self.output.ends_with('{') {
+            self.output += ",";
+        }
+        key.serialize(&mut **self)?;
+        self.output += ":";
+        value.serialize(&mut **self)
+    }
+
+    fn end(self) -> Result<()> {
+        self.output += "}";
+        Ok(())
+    }
+}
+
+impl<'a> ser::SerializeStructVariant for &'a mut Serializer {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        if !self.output.ends_with('{') {
+            self.output += ",";
+        }
+        key.serialize(&mut **self)?;
+        self.output += ":";
+        value.serialize(&mut **self)
+    }
+
+    fn end(self) -> Result<()> {
+        self.output += "}}";
+        Ok(())
+    }
+}
 
 fn escape(v: &str) -> String {
     // TODO

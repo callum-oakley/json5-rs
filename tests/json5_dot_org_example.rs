@@ -7,7 +7,7 @@ extern crate serde_derive;
 
 mod common;
 
-use common::parses_to;
+use common::deserializes_to;
 
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -25,7 +25,7 @@ struct Example {
 }
 
 #[test]
-fn parses_example_from_json5_dot_org() {
+fn serializes_example_from_json5_dot_org() {
     let mut contents = String::new();
     File::open("tests/assets/json5_dot_org_example.json5")
         .unwrap()
@@ -45,5 +45,5 @@ fn parses_example_from_json5_dot_org() {
         backwards_compatible: "with JSON".to_owned(),
     };
 
-    parses_to(&contents, expected)
+    deserializes_to(&contents, expected)
 }
