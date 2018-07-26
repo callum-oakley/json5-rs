@@ -226,8 +226,6 @@ impl<'a> ser::SerializeSeq for &'a mut Serializer {
     }
 }
 
-// TODO can we re-use the functions above in the following?
-
 impl<'a> ser::SerializeTuple for &'a mut Serializer {
     type Ok = ();
     type Error = Error;
@@ -240,8 +238,7 @@ impl<'a> ser::SerializeTuple for &'a mut Serializer {
     }
 
     fn end(self) -> Result<()> {
-        self.output += "]";
-        Ok(())
+        ser::SerializeSeq::end(self)
     }
 }
 
@@ -253,15 +250,11 @@ impl<'a> ser::SerializeTupleStruct for &'a mut Serializer {
     where
         T: ?Sized + Serialize,
     {
-        if !self.output.ends_with('[') {
-            self.output += ",";
-        }
-        value.serialize(&mut **self)
+        ser::SerializeSeq::serialize_element(self, value)
     }
 
     fn end(self) -> Result<()> {
-        self.output += "]";
-        Ok(())
+        ser::SerializeSeq::end(self)
     }
 }
 
@@ -273,10 +266,7 @@ impl<'a> ser::SerializeTupleVariant for &'a mut Serializer {
     where
         T: ?Sized + Serialize,
     {
-        if !self.output.ends_with('[') {
-            self.output += ",";
-        }
-        value.serialize(&mut **self)
+        ser::SerializeSeq::serialize_element(self, value)
     }
 
     fn end(self) -> Result<()> {
@@ -321,17 +311,12 @@ impl<'a> ser::SerializeStruct for &'a mut Serializer {
     where
         T: ?Sized + Serialize,
     {
-        if !self.output.ends_with('{') {
-            self.output += ",";
-        }
-        key.serialize(&mut **self)?;
-        self.output += ":";
-        value.serialize(&mut **self)
+        ser::SerializeMap::serialize_key(self, key)?;
+        ser::SerializeMap::serialize_value(self, value)
     }
 
     fn end(self) -> Result<()> {
-        self.output += "}";
-        Ok(())
+        ser::SerializeMap::end(self)
     }
 }
 
@@ -343,12 +328,7 @@ impl<'a> ser::SerializeStructVariant for &'a mut Serializer {
     where
         T: ?Sized + Serialize,
     {
-        if !self.output.ends_with('{') {
-            self.output += ",";
-        }
-        key.serialize(&mut **self)?;
-        self.output += ":";
-        value.serialize(&mut **self)
+        ser::SerializeStruct::serialize_field(self, key, value)
     }
 
     fn end(self) -> Result<()> {
