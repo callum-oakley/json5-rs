@@ -2,6 +2,11 @@
 name = "json5"
 version = "0.1.0"
 authors = ["Callum Oakley <c.oakley108@gmail.com>"]
+description = "A Rust JSON5 serializer and deserializer which speaks Serde."
+license = "ISC"
+repository = "https://github.com/callum-oakley/json5-rs"
+readme = "README.md"
+keywords = ["json5", "parse", "parser", "serde", "json"]
 
 [dependencies]
 pest = { git = "https://github.com/pest-parser/pest" }
