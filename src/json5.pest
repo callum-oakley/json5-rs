@@ -1,16 +1,16 @@
 // see https://spec.json5.org/#syntactic-grammar and
 // https://spec.json5.org/#lexical-grammar
 
-COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!line_terminator ~ ANY)* }
+comment = _{ "/*" ~ (!"*/" ~ any)* ~ "*/" | "//" ~ (!line_terminator ~ any)* }
 
-WHITESPACE = _{
+whitespace = _{
   "\u{0009}" |
   "\u{000B}" |
   "\u{000C}" |
   "\u{0020}" |
   "\u{00A0}" |
   "\u{FEFF}" |
-  SPACE_SEPARATOR |
+  space_separator |
   line_terminator
 }
 
@@ -20,13 +20,13 @@ boolean = @{ "true" | "false" }
 
 char_escape_sequence = @{ single_escape_char | non_escape_char }
 
-char_literal = @{ !("\\" | line_terminator) ~ ANY }
+char_literal = @{ !("\\" | line_terminator) ~ any }
 
-decimal_integer_literal = _{ "0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+decimal_integer_literal = _{ "0" | ascii_nonzero_digit ~ ascii_digit* }
 
 decimal_literal = _{
-  decimal_integer_literal ~ "." ~ ASCII_DIGIT* ~ exponent_part? |
-  "." ~ ASCII_DIGIT+~ exponent_part? |
+  decimal_integer_literal ~ "." ~ ascii_digit* ~ exponent_part? |
+  "." ~ ascii_digit+~ exponent_part? |
   decimal_integer_literal ~ exponent_part?
 }
 
@@ -36,7 +36,7 @@ double_quote_char = _{
   !"\"" ~ char_literal
 }
 
-escape_char = _{ single_escape_char | ASCII_DIGIT | "x" | "u" }
+escape_char = _{ single_escape_char | ascii_digit | "x" | "u" }
 
 escape_sequence = _{
   char_escape_sequence |
@@ -45,21 +45,21 @@ escape_sequence = _{
   "u" ~ unicode_escape_sequence
 }
 
-exponent_part = _{ ^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+ }
+exponent_part = _{ ^"e" ~ ("+" | "-")? ~ ascii_digit+ }
 
-hex_escape_sequence = @{ ASCII_HEX_DIGIT{2} }
+hex_escape_sequence = @{ ascii_hex_digit{2} }
 
-hex_integer_literal = _{ ^"0x" ~ ASCII_HEX_DIGIT+ }
+hex_integer_literal = _{ ^"0x" ~ ascii_hex_digit+ }
 
 identifier = ${ identifier_start ~ identifier_part* }
 
 identifier_part = _{
   identifier_start |
   &(
-    NONSPACING_MARK |
-    DIACRITIC | // not sure about this, spec says "Combining spacing mark (Mc)"
-    DECIMAL_NUMBER |
-    CONNECTOR_PUNCTUATION |
+    nonspacing_mark |
+    diacritic | // not sure about this, spec says "Combining spacing mark (Mc)"
+    decimal_number |
+    connector_punctuation |
     "\u{200C}" |
     "\u{200D}"
   ) ~ char_literal
@@ -78,7 +78,7 @@ line_terminator = _{ "\u{000A}" | "\u{000D}" | "\u{2028}" | "\u{2029}" }
 
 line_terminator_sequence = _{ "\u{000D}" ~ "\u{000A}" | line_terminator }
 
-non_escape_char = _{ !(escape_char | line_terminator) ~ ANY }
+non_escape_char = _{ !(escape_char | line_terminator) ~ any }
 
 nul_escape_sequence = @{ "0" }
 
@@ -107,17 +107,34 @@ single_quote_char = _{
 
 string = ${ "\"" ~ double_quote_char* ~ "\"" | "'" ~ single_quote_char* ~ "'" }
 
-text = _{ SOI ~ value ~ EOI }
+text = _{ soi ~ value ~ eoi }
 
-unicode_escape_sequence = @{ ASCII_HEX_DIGIT{4} }
+unicode_escape_sequence = @{ ascii_hex_digit{4} }
 
 unicode_letter = _{
-  UPPERCASE_LETTER |
-  LOWERCASE_LETTER |
-  TITLECASE_LETTER |
-  MODIFIER_LETTER |
-  OTHER_LETTER |
-  LETTER_NUMBER
+  uppercase_letter |
+  lowercase_letter |
+  titlecase_letter |
+  modifier_letter |
+  other_letter |
+  letter_number
 }
 
 value = _{ null | boolean | string | number | object | array }
+
+// Pest 2 shims
+
+ascii_digit = _{ '0'..'9' }
+ascii_hex_digit = _{ '0'..'9' | 'a'..'f' | 'A'..'F' }
+ascii_nonzero_digit = _{ '1'..'9' }
+connector_punctuation = _{ !any }
+decimal_number = _{ "0" | ascii_digit+ }
+diacritic = _{ !any }
+letter_number = _{ !any }
+lowercase_letter = _{ 'a'..'z' }
+modifier_letter = _{ !any }
+nonspacing_mark = _{ !any }
+other_letter = _{ !any }
+space_separator = _{ " " }
+titlecase_letter = _{ 'A'..'Z' }
+uppercase_letter = _{ 'A'..'Z' }

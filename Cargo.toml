@@ -9,8 +9,8 @@ readme = "README.md"
 keywords = ["json5", "parse", "parser", "serde", "json"]
 
 [dependencies]
-pest = { git = "https://github.com/pest-parser/pest" }
-pest_derive = { git = "https://github.com/pest-parser/pest" }
+pest = "1.0"
+pest_derive = "1.0"
 serde = "1.0"
 
 [dev-dependencies]

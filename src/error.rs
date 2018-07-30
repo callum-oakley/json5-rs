@@ -12,8 +12,8 @@ pub enum Error {
     Message(String),
 }
 
-impl From<pest::error::Error<Rule>> for Error {
-    fn from(err: pest::error::Error<Rule>) -> Self {
+impl<'a> From<pest::Error<'a, Rule>> for Error {
+    fn from(err: pest::Error<'a, Rule>) -> Self {
         Error::Message(err.to_string())
     }
 }
