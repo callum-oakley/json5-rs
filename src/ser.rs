@@ -342,6 +342,7 @@ fn escape(v: &str) -> String {
         .flat_map(|c| match c {
             '"' => vec!['\\', c],
             '\n' => vec!['\\', 'n'],
+            '\\' => vec!['\\', '\\'],
             c => vec![c],
         })
         .collect()

@@ -84,6 +84,9 @@ fn serializes_char() {
 fn serializes_str() {
     serializes_to("Hello!", "\"Hello!\"");
     serializes_to("안녕하세요", "\"안녕하세요\"");
+    serializes_to("\"quotes!\"", "\"\\\"quotes!\\\"\"");
+    serializes_to("new\nlines", "\"new\\nlines\"");
+    serializes_to("\\", "\"\\\\\"");
 }
 
 #[test]
@@ -92,6 +95,7 @@ fn serializes_string() {
     serializes_to("안녕하세요".to_owned(), "\"안녕하세요\"");
     serializes_to("\"quotes!\"".to_owned(), "\"\\\"quotes!\\\"\"");
     serializes_to("new\nlines".to_owned(), "\"new\\nlines\"");
+    serializes_to("\\".to_owned(), "\"\\\\\"");
 }
 
 #[test]
