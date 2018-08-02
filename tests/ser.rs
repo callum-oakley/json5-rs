@@ -90,6 +90,8 @@ fn serializes_str() {
 fn serializes_string() {
     serializes_to("Hello!".to_owned(), "\"Hello!\"");
     serializes_to("안녕하세요".to_owned(), "\"안녕하세요\"");
+    serializes_to("\"quotes!\"".to_owned(), "\"\\\"quotes!\\\"\"");
+    serializes_to("new\nlines".to_owned(), "\"new\\nlines\"");
 }
 
 #[test]

@@ -338,6 +338,11 @@ impl<'a> ser::SerializeStructVariant for &'a mut Serializer {
 }
 
 fn escape(v: &str) -> String {
-    // TODO
-    return v.to_string();
+    v.chars()
+        .flat_map(|c| match c {
+            '"' => vec!['\\', c],
+            '\n' => vec!['\\', 'n'],
+            c => vec![c],
+        })
+        .collect()
 }
