@@ -1,9 +1,9 @@
 // see https://spec.json5.org/#syntactic-grammar and
 // https://spec.json5.org/#lexical-grammar
 
-comment = _{ "/*" ~ (!"*/" ~ any)* ~ "*/" | "//" ~ (!line_terminator ~ any)* }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!line_terminator ~ ANY)* }
 
-whitespace = _{
+WHITESPACE = _{
   "\u{0009}" |
   "\u{000B}" |
   "\u{000C}" |
@@ -20,7 +20,7 @@ boolean = @{ "true" | "false" }
 
 char_escape_sequence = @{ single_escape_char | non_escape_char }
 
-char_literal = @{ !("\\" | line_terminator) ~ any }
+char_literal = @{ !("\\" | line_terminator) ~ ANY }
 
 decimal_integer_literal = _{ "0" | ascii_nonzero_digit ~ ascii_digit* }
 
@@ -78,7 +78,7 @@ line_terminator = _{ "\u{000A}" | "\u{000D}" | "\u{2028}" | "\u{2029}" }
 
 line_terminator_sequence = _{ "\u{000D}" ~ "\u{000A}" | line_terminator }
 
-non_escape_char = _{ !(escape_char | line_terminator) ~ any }
+non_escape_char = _{ !(escape_char | line_terminator) ~ ANY }
 
 nul_escape_sequence = @{ "0" }
 
@@ -107,7 +107,7 @@ single_quote_char = _{
 
 string = ${ "\"" ~ double_quote_char* ~ "\"" | "'" ~ single_quote_char* ~ "'" }
 
-text = _{ soi ~ value ~ eoi }
+text = _{ SOI ~ value ~ EOI }
 
 unicode_escape_sequence = @{ ascii_hex_digit{4} }
 
@@ -127,14 +127,14 @@ value = _{ null | boolean | string | number | object | array }
 ascii_digit = _{ '0'..'9' }
 ascii_hex_digit = _{ '0'..'9' | 'a'..'f' | 'A'..'F' }
 ascii_nonzero_digit = _{ '1'..'9' }
-connector_punctuation = _{ !any }
+connector_punctuation = _{ !ANY }
 decimal_number = _{ "0" | ascii_digit+ }
-diacritic = _{ !any }
-letter_number = _{ !any }
+diacritic = _{ !ANY }
+letter_number = _{ !ANY }
 lowercase_letter = _{ 'a'..'z' }
-modifier_letter = _{ !any }
-nonspacing_mark = _{ !any }
-other_letter = _{ !any }
+modifier_letter = _{ !ANY }
+nonspacing_mark = _{ !ANY }
+other_letter = _{ !ANY }
 space_separator = _{ " " }
 titlecase_letter = _{ 'A'..'Z' }
 uppercase_letter = _{ 'A'..'Z' }
