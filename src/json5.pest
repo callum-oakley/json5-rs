@@ -10,7 +10,7 @@ WHITESPACE = _{
   "\u{0020}" |
   "\u{00A0}" |
   "\u{FEFF}" |
-  space_separator |
+  SPACE_SEPARATOR |
   line_terminator
 }
 
@@ -22,11 +22,11 @@ char_escape_sequence = @{ single_escape_char | non_escape_char }
 
 char_literal = @{ !("\\" | line_terminator) ~ ANY }
 
-decimal_integer_literal = _{ "0" | ascii_nonzero_digit ~ ascii_digit* }
+decimal_integer_literal = _{ "0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
 
 decimal_literal = _{
-  decimal_integer_literal ~ "." ~ ascii_digit* ~ exponent_part? |
-  "." ~ ascii_digit+~ exponent_part? |
+  decimal_integer_literal ~ "." ~ ASCII_DIGIT* ~ exponent_part? |
+  "." ~ ASCII_DIGIT+~ exponent_part? |
   decimal_integer_literal ~ exponent_part?
 }
 
@@ -36,7 +36,7 @@ double_quote_char = _{
   !"\"" ~ char_literal
 }
 
-escape_char = _{ single_escape_char | ascii_digit | "x" | "u" }
+escape_char = _{ single_escape_char | ASCII_DIGIT | "x" | "u" }
 
 escape_sequence = _{
   char_escape_sequence |
@@ -45,21 +45,21 @@ escape_sequence = _{
   "u" ~ unicode_escape_sequence
 }
 
-exponent_part = _{ ^"e" ~ ("+" | "-")? ~ ascii_digit+ }
+exponent_part = _{ ^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+ }
 
-hex_escape_sequence = @{ ascii_hex_digit{2} }
+hex_escape_sequence = @{ ASCII_HEX_DIGIT{2} }
 
-hex_integer_literal = _{ ^"0x" ~ ascii_hex_digit+ }
+hex_integer_literal = _{ ^"0x" ~ ASCII_HEX_DIGIT+ }
 
 identifier = ${ identifier_start ~ identifier_part* }
 
 identifier_part = _{
   identifier_start |
   &(
-    nonspacing_mark |
-    diacritic | // not sure about this, spec says "Combining spacing mark (Mc)"
-    decimal_number |
-    connector_punctuation |
+    NONSPACING_MARK |
+    DIACRITIC | // not sure about this, spec says "Combining spacing mark (Mc)"
+    DECIMAL_NUMBER |
+    CONNECTOR_PUNCTUATION |
     "\u{200C}" |
     "\u{200D}"
   ) ~ char_literal
@@ -109,32 +109,15 @@ string = ${ "\"" ~ double_quote_char* ~ "\"" | "'" ~ single_quote_char* ~ "'" }
 
 text = _{ SOI ~ value ~ EOI }
 
-unicode_escape_sequence = @{ ascii_hex_digit{4} }
+unicode_escape_sequence = @{ ASCII_HEX_DIGIT{4} }
 
 unicode_letter = _{
-  uppercase_letter |
-  lowercase_letter |
-  titlecase_letter |
-  modifier_letter |
-  other_letter |
-  letter_number
+  UPPERCASE_LETTER |
+  LOWERCASE_LETTER |
+  TITLECASE_LETTER |
+  MODIFIER_LETTER |
+  OTHER_LETTER |
+  LETTER_NUMBER
 }
 
 value = _{ null | boolean | string | number | object | array }
-
-// Pest 2 shims
-
-ascii_digit = _{ '0'..'9' }
-ascii_hex_digit = _{ '0'..'9' | 'a'..'f' | 'A'..'F' }
-ascii_nonzero_digit = _{ '1'..'9' }
-connector_punctuation = _{ !ANY }
-decimal_number = _{ "0" | ascii_digit+ }
-diacritic = _{ !ANY }
-letter_number = _{ !ANY }
-lowercase_letter = _{ 'a'..'z' }
-modifier_letter = _{ !ANY }
-nonspacing_mark = _{ !ANY }
-other_letter = _{ !ANY }
-space_separator = _{ " " }
-titlecase_letter = _{ 'A'..'Z' }
-uppercase_letter = _{ 'A'..'Z' }
