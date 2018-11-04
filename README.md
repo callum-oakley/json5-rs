@@ -1,5 +1,8 @@
 # JSON5
 
+[![crates.io](https://img.shields.io/crates/v/json5.svg)](https://crates.io/crates/json5)
+[![docs.rs](https://docs.rs/json5/badge.svg)](https://docs.rs/json5)
+
 A Rust [JSON5] serializer and deserializer which speaks [Serde].
 
 ## API
