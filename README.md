@@ -17,7 +17,7 @@ borrowed strings.
 
 ## Example
 
-Read some config in to a struct.
+Read some config into a struct.
 
 ```rust
 extern crate json5;

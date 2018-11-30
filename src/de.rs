@@ -12,12 +12,24 @@ const _GRAMMAR: &str = include_str!("json5.pest");
 #[grammar = "json5.pest"]
 struct Parser;
 
-pub struct Deserializer<'de> {
+/// Deserialize an instance of type `T` from a string of JSON5 text. Can fail if the input is
+/// invalid JSON5, or doesn&rsquo;t match the structure of the target type.
+pub fn from_str<'a, T>(s: &'a str) -> Result<T>
+where
+    T: de::Deserialize<'a>,
+{
+    let mut deserializer = Deserializer::from_str(s)?;
+    T::deserialize(&mut deserializer)
+}
+
+struct Deserializer<'de> {
     pair: Option<Pair<'de, Rule>>,
 }
 
 impl<'de> Deserializer<'de> {
-    pub fn from_str(input: &'de str) -> Result<Self> {
+    /// Creates a JSON5 deserializer from a `&str`. This parses the input at construction time, so
+    /// can fail if the input is not valid JSON5.
+    fn from_str(input: &'de str) -> Result<Self> {
         let pair = Parser::parse(Rule::text, input)?.next().unwrap();
         Ok(Deserializer::from_pair(pair))
     }
@@ -25,14 +37,6 @@ impl<'de> Deserializer<'de> {
     fn from_pair(pair: Pair<'de, Rule>) -> Self {
         Deserializer { pair: Some(pair) }
     }
-}
-
-pub fn from_str<'a, T>(s: &'a str) -> Result<T>
-where
-    T: de::Deserialize<'a>,
-{
-    let mut deserializer = Deserializer::from_str(s)?;
-    T::deserialize(&mut deserializer)
 }
 
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
@@ -208,13 +212,13 @@ fn parse_string(pair: Pair<Rule>) -> String {
             Rule::char_literal => String::from(component.as_str()),
             Rule::char_escape_sequence => parse_char_escape_sequence(component),
             Rule::nul_escape_sequence => String::from("\u{0000}"),
-            Rule::hex_escape_sequence | Rule::unicode_escape_sequence => char::from_u32(parse_hex(
-                component.as_str(),
-            )).unwrap()
-                .to_string(),
+            Rule::hex_escape_sequence | Rule::unicode_escape_sequence => {
+                char::from_u32(parse_hex(component.as_str()))
+                    .unwrap()
+                    .to_string()
+            }
             _ => unreachable!(),
-        })
-        .collect()
+        }).collect()
 }
 
 fn parse_char_escape_sequence(pair: Pair<Rule>) -> String {

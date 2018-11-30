@@ -5,10 +5,15 @@ use std::fmt::{self, Display};
 
 use de::Rule;
 
+/// Alias for a `Result` with error type `json5::Error`
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// A bare bones error type which currently just collapses all the underlying errors in to a single
+/// string... This is fine for displaying to the user, but not very useful otherwise. Work to be
+/// done here.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
+    /// Just shove everything in a single variant for now.
     Message(String),
 }
 

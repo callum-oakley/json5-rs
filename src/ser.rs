@@ -2,11 +2,7 @@ use serde::ser::{self, Serialize};
 
 use error::{Error, Result};
 
-pub struct Serializer {
-    output: String,
-    // TODO settings for formatting (single vs double quotes, whitespace etc)
-}
-
+/// Attempts to serialize the input as a JSON5 string (actually a JSON string).
 pub fn to_string<T>(value: &T) -> Result<String>
 where
     T: Serialize,
@@ -16,6 +12,11 @@ where
     };
     value.serialize(&mut serializer)?;
     Ok(serializer.output)
+}
+
+struct Serializer {
+    output: String,
+    // TODO settings for formatting (single vs double quotes, whitespace etc)
 }
 
 impl Serializer {
@@ -344,6 +345,5 @@ fn escape(v: &str) -> String {
             '\n' => vec!['\\', 'n'],
             '\\' => vec!['\\', '\\'],
             c => vec![c],
-        })
-        .collect()
+        }).collect()
 }
