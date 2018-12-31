@@ -20,9 +20,8 @@ borrowed strings.
 Read some config into a struct.
 
 ```rust
-extern crate json5;
-#[macro_use]
-extern crate serde_derive;
+use json5;
+use serde_derive::Deserialize;
 
 #[derive(Deserialize, Debug, PartialEq)]
 struct Config {

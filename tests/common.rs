@@ -1,5 +1,5 @@
-extern crate json5;
-extern crate serde;
+use json5;
+use serde;
 
 use std::f64;
 

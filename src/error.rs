@@ -1,6 +1,5 @@
 use pest;
 use serde::{de, ser};
-use std;
 use std::fmt::{self, Display};
 
 use crate::de::Rule;
@@ -36,7 +35,7 @@ impl de::Error for Error {
 }
 
 impl Display for Error {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(std::error::Error::description(self))
     }
 }

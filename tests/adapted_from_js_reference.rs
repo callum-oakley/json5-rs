@@ -1,5 +1,3 @@
-extern crate json5;
-
 use std::collections::HashMap;
 use std::f64;
 

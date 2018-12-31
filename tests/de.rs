@@ -1,6 +1,5 @@
-extern crate json5;
-#[macro_use]
-extern crate serde_derive;
+use json5;
+use serde_derive::Deserialize;
 
 use std::collections::HashMap;
 

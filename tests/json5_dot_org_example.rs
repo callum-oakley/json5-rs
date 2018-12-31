@@ -1,9 +1,8 @@
-extern crate json5;
+use json5;
 
+use serde_derive::Deserialize;
 use std::fs::File;
 use std::io::prelude::*;
-#[macro_use]
-extern crate serde_derive;
 
 mod common;
 

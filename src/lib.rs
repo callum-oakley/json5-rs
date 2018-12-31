@@ -28,9 +28,7 @@
 //! text into a value of that type with [`from_str`][].
 //!
 //! ```rust
-//! extern crate json5;
-//! #[macro_use]
-//! extern crate serde_derive;
+//! use serde_derive::Deserialize;
 //!
 //! #[derive(Deserialize, Debug, PartialEq)]
 //! struct Config {
@@ -71,9 +69,7 @@
 //! output style (single over double quotes, trailing commas, indentation etc.).
 //!
 //! ```rust
-//! extern crate json5;
-//! #[macro_use]
-//! extern crate serde_derive;
+//! use serde_derive::Serialize;
 //!
 //! #[derive(Serialize, PartialEq, Debug)]
 //! #[serde(untagged)]
@@ -124,11 +120,7 @@
 //! [byte arrays]: https://serde.rs/data-model.html#types
 
 #![warn(missing_docs)]
-extern crate pest;
-#[macro_use]
-extern crate serde;
-#[macro_use]
-extern crate pest_derive;
+#![warn(rust_2018_idioms)]
 
 mod de;
 mod error;

@@ -1,12 +1,12 @@
 use pest::iterators::{Pair, Pairs};
 use pest::Parser as P;
+use pest_derive::Parser;
 use serde::de;
+use serde::forward_to_deserialize_any;
 use std::char;
 use std::f64;
 
 use crate::error::{Error, Result};
-
-const _GRAMMAR: &str = include_str!("json5.pest");
 
 #[derive(Parser)]
 #[grammar = "json5.pest"]
@@ -198,7 +198,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 }
 
-fn parse_bool(pair: &Pair<Rule>) -> bool {
+fn parse_bool(pair: &Pair<'_, Rule>) -> bool {
     match pair.as_str() {
         "true" => true,
         "false" => false,
@@ -206,7 +206,7 @@ fn parse_bool(pair: &Pair<Rule>) -> bool {
     }
 }
 
-fn parse_string(pair: Pair<Rule>) -> String {
+fn parse_string(pair: Pair<'_, Rule>) -> String {
     pair.into_inner()
         .map(|component| match component.as_rule() {
             Rule::char_literal => String::from(component.as_str()),
@@ -222,7 +222,7 @@ fn parse_string(pair: Pair<Rule>) -> String {
         .collect()
 }
 
-fn parse_char_escape_sequence(pair: &Pair<Rule>) -> String {
+fn parse_char_escape_sequence(pair: &Pair<'_, Rule>) -> String {
     String::from(match pair.as_str() {
         "b" => "\u{0008}",
         "f" => "\u{000C}",
@@ -234,7 +234,7 @@ fn parse_char_escape_sequence(pair: &Pair<Rule>) -> String {
     })
 }
 
-fn parse_number(pair: &Pair<Rule>) -> f64 {
+fn parse_number(pair: &Pair<'_, Rule>) -> f64 {
     match pair.as_str() {
         "Infinity" => f64::INFINITY,
         "-Infinity" => f64::NEG_INFINITY,
