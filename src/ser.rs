@@ -20,7 +20,7 @@ struct Serializer {
 }
 
 impl Serializer {
-    fn call_to_string<T>(&mut self, v: T) -> Result<()>
+    fn call_to_string<T>(&mut self, v: &T) -> Result<()>
     where
         T: ToString,
     {
@@ -42,47 +42,47 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeStructVariant = Self;
 
     fn serialize_bool(self, v: bool) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_i8(self, v: i8) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_i16(self, v: i16) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_i32(self, v: i32) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_i64(self, v: i64) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_u8(self, v: u8) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_u16(self, v: u16) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_u32(self, v: u32) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_u64(self, v: u64) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_f32(self, v: f32) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_f64(self, v: f64) -> Result<()> {
-        self.call_to_string(v)
+        self.call_to_string(&v)
     }
 
     fn serialize_char(self, v: char) -> Result<()> {
@@ -345,5 +345,6 @@ fn escape(v: &str) -> String {
             '\n' => vec!['\\', 'n'],
             '\\' => vec!['\\', '\\'],
             c => vec![c],
-        }).collect()
+        })
+        .collect()
 }
