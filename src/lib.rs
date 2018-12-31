@@ -134,6 +134,6 @@ mod de;
 mod error;
 mod ser;
 
-pub use de::from_str;
-pub use error::{Error, Result};
-pub use ser::to_string;
+pub use crate::de::from_str;
+pub use crate::error::{Error, Result};
+pub use crate::ser::to_string;

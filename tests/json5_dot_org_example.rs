@@ -7,7 +7,7 @@ extern crate serde_derive;
 
 mod common;
 
-use common::deserializes_to;
+use crate::common::deserializes_to;
 
 #[derive(Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]

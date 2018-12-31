@@ -4,7 +4,7 @@ use serde::de;
 use std::char;
 use std::f64;
 
-use error::{Error, Result};
+use crate::error::{Error, Result};
 
 const _GRAMMAR: &str = include_str!("json5.pest");
 

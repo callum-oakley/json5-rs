@@ -1,6 +1,6 @@
 use serde::ser::{self, Serialize};
 
-use error::{Error, Result};
+use crate::error::{Error, Result};
 
 /// Attempts to serialize the input as a JSON5 string (actually a JSON string).
 pub fn to_string<T>(value: &T) -> Result<String>

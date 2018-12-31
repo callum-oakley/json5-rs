@@ -7,6 +7,7 @@ license = "ISC"
 repository = "https://github.com/callum-oakley/json5-rs"
 readme = "README.md"
 keywords = ["json5", "parse", "parser", "serde", "json"]
+edition = "2018"
 
 [dependencies]
 pest = "2.0"

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 mod common;
 
-use common::serializes_to;
+use crate::common::serializes_to;
 
 #[test]
 fn serializes_bool() {

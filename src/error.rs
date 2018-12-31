@@ -3,7 +3,7 @@ use serde::{de, ser};
 use std;
 use std::fmt::{self, Display};
 
-use de::Rule;
+use crate::de::Rule;
 
 /// Alias for a `Result` with error type `json5::Error`
 pub type Result<T> = std::result::Result<T, Error>;
