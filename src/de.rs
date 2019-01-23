@@ -251,7 +251,6 @@ fn parse_number(pair: &Pair<'_, Rule>) -> f64 {
 }
 
 fn parse_integer(pair: &Pair<'_, Rule>) -> i64 {
-    println!("parse_integer {:}", pair.as_str());
     match pair.as_str() {
         s if is_hex_literal(s) => parse_hex(&s[2..]) as i64,
         s => s.parse().unwrap(),
