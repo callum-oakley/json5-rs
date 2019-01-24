@@ -358,10 +358,15 @@ fn deserializes_ignored() {
 
 #[test]
 fn deserializes_json_values() {
-    // As int if json uses int type
+    // As int if json uses int type.
+    deserializes_to("0x2a", serde_json::json!(42));
     deserializes_to("0x2A", serde_json::json!(42));
+    deserializes_to("0X2A", serde_json::json!(42));
     deserializes_to("42", serde_json::json!(42));
 
-    // As float if json calls for explicit float type
+    // As float if json calls for explicit float type.
     deserializes_to("42.", serde_json::json!(42.));
+    deserializes_to("42e0", serde_json::json!(42.));
+    deserializes_to("4e2", serde_json::json!(400.));
+    deserializes_to("4e2", serde_json::json!(4e2));
 }
