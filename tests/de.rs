@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 mod common;
 
-use crate::common::deserializes_to;
+use crate::common::{deserializes_to, deserializes_with_error};
 
 #[test]
 fn deserializes_bool() {
@@ -369,4 +369,25 @@ fn deserializes_json_values() {
     deserializes_to("42e0", serde_json::json!(42.));
     deserializes_to("4e2", serde_json::json!(400.));
     deserializes_to("4e2", serde_json::json!(4e2));
+}
+
+#[test]
+fn deserialize_error_messages() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    enum E {
+        A,
+    }
+    deserializes_with_error("'B'", E::A, "unknown variant `B`, expected `A`");
+
+    deserializes_with_error("0xffffffffff", 42, "error parsing hex");
+
+    let mut over_i64 = i64::max_value().to_string();
+    over_i64.push_str("0");
+    deserializes_with_error(
+        over_i64.as_str(),
+        serde_json::json!(42),
+        "error parsing integer",
+    );
+
+    deserializes_with_error("1e309", 42, "error parsing number: too large");
 }

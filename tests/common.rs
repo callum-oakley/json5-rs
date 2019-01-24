@@ -23,6 +23,17 @@ pub fn deserializes_to_nan<'a>(s: &'a str) {
 }
 
 #[allow(dead_code)]
+pub fn deserializes_with_error<'a, T>(s: &'a str, _: T, error_expected: &'a str)
+where
+    T: ::std::fmt::Debug + ::std::cmp::PartialEq + serde::de::Deserialize<'a>,
+{
+    match json5::from_str::<T>(s) {
+        Ok(val) => panic!(format!("error expected!, got {:?}", val)),
+        Err(err) => assert_eq!(format!("{}", err), error_expected),
+    }
+}
+
+#[allow(dead_code)]
 pub fn serializes_to<T>(v: T, s: &'static str)
 where
     T: ::std::fmt::Debug + ::std::cmp::PartialEq + serde::ser::Serialize,

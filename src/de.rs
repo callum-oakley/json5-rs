@@ -50,14 +50,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         match pair.as_rule() {
             Rule::null => visitor.visit_unit(),
             Rule::boolean => visitor.visit_bool(parse_bool(&pair)),
-            Rule::string | Rule::identifier => visitor.visit_string(parse_string(pair)),
+            Rule::string | Rule::identifier => visitor.visit_string(parse_string(pair)?),
             Rule::number => {
                 if is_int(pair.as_str()) {
-                    visitor.visit_i64(parse_integer(&pair))
+                    visitor.visit_i64(parse_integer(&pair)?)
                 } else {
-                    visitor.visit_f64(parse_number(&pair))
+                    visitor.visit_f64(parse_number(&pair)?)
                 }
-            },
+            }
             Rule::array => visitor.visit_seq(Seq {
                 pairs: pair.into_inner(),
             }),
@@ -89,7 +89,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_i8(parse_number(&pair) as i8)
+        visitor.visit_i8(parse_number(&pair)? as i8)
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
@@ -97,7 +97,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_i16(parse_number(&pair) as i16)
+        visitor.visit_i16(parse_number(&pair)? as i16)
     }
 
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
@@ -105,7 +105,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_i32(parse_number(&pair) as i32)
+        visitor.visit_i32(parse_number(&pair)? as i32)
     }
 
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
@@ -113,7 +113,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_i64(parse_number(&pair) as i64)
+        visitor.visit_i64(parse_number(&pair)? as i64)
     }
 
     fn deserialize_i128<V>(self, visitor: V) -> Result<V::Value>
@@ -121,7 +121,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_i128(parse_number(&pair) as i128)
+        visitor.visit_i128(parse_number(&pair)? as i128)
     }
 
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
@@ -129,7 +129,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_u8(parse_number(&pair) as u8)
+        visitor.visit_u8(parse_number(&pair)? as u8)
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
@@ -137,7 +137,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_u16(parse_number(&pair) as u16)
+        visitor.visit_u16(parse_number(&pair)? as u16)
     }
 
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
@@ -145,7 +145,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_u32(parse_number(&pair) as u32)
+        visitor.visit_u32(parse_number(&pair)? as u32)
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
@@ -153,7 +153,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_u64(parse_number(&pair) as u64)
+        visitor.visit_u64(parse_number(&pair)? as u64)
     }
 
     fn deserialize_u128<V>(self, visitor: V) -> Result<V::Value>
@@ -161,7 +161,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_u128(parse_number(&pair) as u128)
+        visitor.visit_u128(parse_number(&pair)? as u128)
     }
 
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
@@ -169,7 +169,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_f32(parse_number(&pair) as f32)
+        visitor.visit_f32(parse_number(&pair)? as f32)
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
@@ -177,7 +177,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let pair = self.pair.take().unwrap();
-        visitor.visit_f64(parse_number(&pair))
+        visitor.visit_f64(parse_number(&pair)?)
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
@@ -212,16 +212,18 @@ fn parse_bool(pair: &Pair<'_, Rule>) -> bool {
     }
 }
 
-fn parse_string(pair: Pair<'_, Rule>) -> String {
+fn parse_string(pair: Pair<'_, Rule>) -> Result<String> {
     pair.into_inner()
         .map(|component| match component.as_rule() {
-            Rule::char_literal => String::from(component.as_str()),
-            Rule::char_escape_sequence => parse_char_escape_sequence(&component),
-            Rule::nul_escape_sequence => String::from("\u{0000}"),
+            Rule::char_literal => Ok(String::from(component.as_str())),
+            Rule::char_escape_sequence => Ok(parse_char_escape_sequence(&component)),
+            Rule::nul_escape_sequence => Ok(String::from("\u{0000}")),
             Rule::hex_escape_sequence | Rule::unicode_escape_sequence => {
-                char::from_u32(parse_hex(component.as_str()))
-                    .unwrap()
-                    .to_string()
+                let hex_escape = parse_hex(component.as_str())?;
+                match char::from_u32(hex_escape) {
+                    Some(s) => Ok(s.to_string()),
+                    None => Err(de::Error::custom("error parsing hex prefix")),
+                }
             }
             _ => unreachable!(),
         })
@@ -240,30 +242,41 @@ fn parse_char_escape_sequence(pair: &Pair<'_, Rule>) -> String {
     })
 }
 
-fn parse_number(pair: &Pair<'_, Rule>) -> f64 {
+fn parse_number(pair: &Pair<'_, Rule>) -> Result<f64> {
     match pair.as_str() {
-        "Infinity" => f64::INFINITY,
-        "-Infinity" => f64::NEG_INFINITY,
-        "NaN" | "-NaN" => f64::NAN,
-        s if is_hex_literal(s) => f64::from(parse_hex(&s[2..])),
-        s => s.parse().unwrap(),
+        "Infinity" => Ok(f64::INFINITY),
+        "-Infinity" => Ok(f64::NEG_INFINITY),
+        "NaN" | "-NaN" => Ok(f64::NAN),
+        s if is_hex_literal(s) => parse_hex(&s[2..]).map(f64::from),
+        s => {
+            if let Ok(r) = s.parse::<f64>() {
+                if r.is_finite() {
+                    Ok(r)
+                } else {
+                    Err(de::Error::custom("error parsing number: too large"))
+                }
+            } else {
+                Err(de::Error::custom("error parsing number"))
+            }
+        }
     }
 }
 
-fn parse_integer(pair: &Pair<'_, Rule>) -> i64 {
+fn parse_integer(pair: &Pair<'_, Rule>) -> Result<i64> {
     match pair.as_str() {
-        s if is_hex_literal(s) => parse_hex(&s[2..]) as i64,
-        s => s.parse().unwrap(),
+        s if is_hex_literal(s) => Ok(parse_hex(&s[2..])? as i64),
+        s => s
+            .parse()
+            .or(Err(de::Error::custom("error parsing integer"))),
     }
 }
 
 fn is_int(s: &str) -> bool {
-    !s.contains('.') &&
-        (is_hex_literal(s) || (!s.contains('e') && !s.contains('E')))
+    !s.contains('.') && (is_hex_literal(s) || (!s.contains('e') && !s.contains('E')))
 }
 
-fn parse_hex(s: &str) -> u32 {
-    u32::from_str_radix(s, 16).unwrap()
+fn parse_hex(s: &str) -> Result<u32> {
+    u32::from_str_radix(s, 16).or(Err(de::Error::custom("error parsing hex")))
 }
 
 fn is_hex_literal(s: &str) -> bool {
