@@ -51,7 +51,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             Rule::null => visitor.visit_unit(),
             Rule::boolean => visitor.visit_bool(parse_bool(&pair)),
             Rule::string | Rule::identifier => visitor.visit_string(parse_string(pair)),
-            Rule::number => visitor.visit_f64(parse_number(&pair)),
+            Rule::number => {
+                if is_int(pair.as_str()) {
+                    visitor.visit_i64(parse_integer(&pair))
+                } else {
+                    visitor.visit_f64(parse_number(&pair))
+                }
+            },
             Rule::array => visitor.visit_seq(Seq {
                 pairs: pair.into_inner(),
             }),
@@ -242,6 +248,18 @@ fn parse_number(pair: &Pair<'_, Rule>) -> f64 {
         s if is_hex_literal(s) => f64::from(parse_hex(&s[2..])),
         s => s.parse().unwrap(),
     }
+}
+
+fn parse_integer(pair: &Pair<'_, Rule>) -> i64 {
+    match pair.as_str() {
+        s if is_hex_literal(s) => parse_hex(&s[2..]) as i64,
+        s => s.parse().unwrap(),
+    }
+}
+
+fn is_int(s: &str) -> bool {
+    !s.contains('.') &&
+        (is_hex_literal(s) || (!s.contains('e') && !s.contains('E')))
 }
 
 fn parse_hex(s: &str) -> u32 {
