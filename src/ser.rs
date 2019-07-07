@@ -1,4 +1,5 @@
 use serde::ser::{self, Serialize};
+use std::{f32, f64};
 
 use crate::error::{Error, Result};
 
@@ -78,11 +79,27 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_f32(self, v: f32) -> Result<()> {
-        self.call_to_string(&v)
+        Ok(if v == f32::INFINITY {
+            self.output += "Infinity";
+        } else if v == f32::NEG_INFINITY {
+            self.output += "-Infinity";
+        } else if v == f32::NAN {
+            self.output += "NaN";
+        } else {
+            self.call_to_string(&v)?;
+        })
     }
 
     fn serialize_f64(self, v: f64) -> Result<()> {
-        self.call_to_string(&v)
+        Ok(if v == f64::INFINITY {
+            self.output += "Infinity";
+        } else if v == f64::NEG_INFINITY {
+            self.output += "-Infinity";
+        } else if v == f64::NAN {
+            self.output += "NaN";
+        } else {
+            self.call_to_string(&v)?;
+        })
     }
 
     fn serialize_char(self, v: char) -> Result<()> {

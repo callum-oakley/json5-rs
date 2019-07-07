@@ -1,11 +1,12 @@
-use json5;
 use serde_derive::Deserialize;
 
 use std::collections::HashMap;
 
 mod common;
 
-use crate::common::{deserializes_to, deserializes_with_error};
+use crate::common::{
+    deserializes_to, deserializes_to_nan_f32, deserializes_to_nan_f64, deserializes_with_error,
+};
 
 #[test]
 fn deserializes_bool() {
@@ -192,6 +193,10 @@ fn deserializes_f32() {
     deserializes_to("-4.242e1", -x);
     deserializes_to("-.4242e2", -x);
     deserializes_to("-0.4242e2", -x);
+
+    deserializes_to("Infinity", std::f32::INFINITY);
+    deserializes_to("-Infinity", std::f32::NEG_INFINITY);
+    deserializes_to_nan_f32("NaN");
 }
 
 #[test]
@@ -209,6 +214,10 @@ fn deserializes_f64() {
     deserializes_to("-4.242e1", -x);
     deserializes_to("-.4242e2", -x);
     deserializes_to("-0.4242e2", -x);
+
+    deserializes_to("Infinity", std::f64::INFINITY);
+    deserializes_to("-Infinity", std::f64::NEG_INFINITY);
+    deserializes_to_nan_f64("NaN");
 }
 
 #[test]

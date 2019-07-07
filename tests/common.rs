@@ -15,7 +15,15 @@ where
 }
 
 #[allow(dead_code)]
-pub fn deserializes_to_nan<'a>(s: &'a str) {
+pub fn deserializes_to_nan_f32<'a>(s: &'a str) {
+    match json5::from_str::<f32>(s) {
+        Ok(value) => assert!(value.is_nan()),
+        Err(err) => panic!(format!("{}", err)),
+    }
+}
+
+#[allow(dead_code)]
+pub fn deserializes_to_nan_f64<'a>(s: &'a str) {
     match json5::from_str::<f64>(s) {
         Ok(value) => assert!(value.is_nan()),
         Err(err) => panic!(format!("{}", err)),

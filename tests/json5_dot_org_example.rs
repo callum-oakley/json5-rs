@@ -1,5 +1,3 @@
-use json5;
-
 use serde_derive::Deserialize;
 use std::fs::File;
 use std::io::prelude::*;

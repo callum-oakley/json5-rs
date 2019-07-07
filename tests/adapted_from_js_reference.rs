@@ -3,7 +3,7 @@ use std::f64;
 
 mod common;
 
-use crate::common::{deserializes_to, deserializes_to_nan};
+use crate::common::{deserializes_to, deserializes_to_nan_f64};
 
 // The following tests are adapted from https://github.com/json5/json5/blob/d828908384ce8dc40d8dde017ae82afd1b952d79/test/parse.js
 
@@ -166,8 +166,8 @@ fn parses_signed_and_unsiged_infinity() {
 
 #[test]
 fn parses_signed_and_unsigned_nan() {
-    deserializes_to_nan("NaN");
-    deserializes_to_nan("-NaN");
+    deserializes_to_nan_f64("NaN");
+    deserializes_to_nan_f64("-NaN");
 }
 
 // strings

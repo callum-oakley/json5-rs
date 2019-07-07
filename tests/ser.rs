@@ -1,4 +1,3 @@
-use json5;
 use serde_derive::Serialize;
 
 use std::collections::HashMap;
@@ -65,12 +64,20 @@ fn serializes_u64() {
 fn serializes_f32() {
     let x: f32 = 42.42;
     serializes_to(x, "42.42");
+
+    serializes_to(std::f32::INFINITY, "Infinity");
+    serializes_to(std::f32::NEG_INFINITY, "-Infinity");
+    serializes_to(std::f32::NAN, "NaN");
 }
 
 #[test]
 fn serializes_f64() {
     let x: f64 = 42.42;
     serializes_to(x, "42.42");
+
+    serializes_to(std::f64::INFINITY, "Infinity");
+    serializes_to(std::f64::NEG_INFINITY, "-Infinity");
+    serializes_to(std::f64::NAN, "NaN");
 }
 
 #[test]
