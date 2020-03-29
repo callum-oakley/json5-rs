@@ -84,6 +84,14 @@ fn serializes_f64() {
 fn serializes_char() {
     serializes_to('x', "\"x\"");
     serializes_to('자', "\"자\"");
+    serializes_to('"', r#""\"""#);
+    serializes_to('\r', r#""\r""#);
+    serializes_to('\n', r#""\n""#);
+    serializes_to('\t', r#""\t""#);
+    serializes_to('\\', r#""\\""#);
+    serializes_to('/', r#""\/""#);
+    serializes_to('\u{0008}', r#""\b""#);
+    serializes_to('\u{000c}', r#""\f""#);
 }
 
 #[test]

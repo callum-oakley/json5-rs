@@ -224,6 +224,14 @@ fn deserializes_f64() {
 fn deserializes_char() {
     deserializes_to("'x'", 'x');
     deserializes_to("\"자\"", '자');
+    deserializes_to(r#""\"""#, '"');
+    deserializes_to(r#""\r""#, '\r');
+    deserializes_to(r#""\n""#, '\n');
+    deserializes_to(r#""\t""#, '\t');
+    deserializes_to(r#""\\""#, '\\');
+    deserializes_to(r#""\/""#, '/');
+    deserializes_to(r#""\b""#, '\u{0008}');
+    deserializes_to(r#""\f""#, '\u{000c}');
 }
 
 #[test]
