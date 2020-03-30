@@ -354,12 +354,31 @@ fn deserializes_enum() {
         B(i32),
         C(i32, i32),
         D { a: i32, b: i32 },
+        E {},
+        F (),
     }
 
     deserializes_to("'A'", E::A);
     deserializes_to("{ B: 2 }", E::B(2));
     deserializes_to("{ C: [3, 5] }", E::C(3, 5));
     deserializes_to("{ D: { a: 7, b: 11 } }", E::D { a: 7, b: 11 });
+    deserializes_to("{ E: {} }", E::E{});
+    deserializes_to("{ F: [] }", E::F());
+}
+
+#[test]
+fn deserializes_enum_with_error() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    enum E {
+        A {},
+        B (),
+    }
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct S { e: E }
+
+    deserializes_with_error("{ e: 'A' }", S { e: E::A{} }, "expected an object");
+    deserializes_with_error("{ e: 'B' }", S { e: E::B() }, "expected an array");
 }
 
 #[test]

@@ -384,12 +384,14 @@ impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
     where
         V: de::Visitor<'de>,
     {
-        let pair = self.pair.unwrap();
-        match pair.as_rule() {
-            Rule::array => visitor.visit_seq(Seq {
-                pairs: pair.into_inner(),
-            }),
-            _ => Err(de::Error::custom("expected an array")),
+        match self.pair {
+            Some(pair) => match pair.as_rule() {
+                Rule::array => visitor.visit_seq(Seq {
+                    pairs: pair.into_inner(),
+                }),
+                _ => Err(de::Error::custom("expected an array")),
+            }
+            None => Err(de::Error::custom("expected an array")),
         }
     }
 
@@ -397,12 +399,14 @@ impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
     where
         V: de::Visitor<'de>,
     {
-        let pair = self.pair.unwrap();
-        match pair.as_rule() {
-            Rule::object => visitor.visit_map(Map {
-                pairs: pair.into_inner(),
-            }),
-            _ => Err(de::Error::custom("expected an object")),
+        match self.pair {
+            Some(pair) => match pair.as_rule() {
+                Rule::object => visitor.visit_map(Map {
+                    pairs: pair.into_inner(),
+                }),
+                _ => Err(de::Error::custom("expected an object")),
+            }
+            None => Err(de::Error::custom("expected an object")),
         }
     }
 }
