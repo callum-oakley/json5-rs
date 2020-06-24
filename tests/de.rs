@@ -1,6 +1,8 @@
-use serde_derive::Deserialize;
+use serde::de;
+use serde_derive::{Deserialize};
 
 use std::collections::HashMap;
+use std::fmt;
 
 mod common;
 
@@ -304,7 +306,40 @@ fn deserializes_seq() {
             Val::Bool(true),
             Val::String("hello".to_owned()),
         ],
-    )
+    );
+}
+
+#[test]
+fn deserializes_seq_size_hint() {
+    #[derive(Debug, PartialEq)]
+    struct Size(usize);
+    impl<'de> de::Deserialize<'de> for Size {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            struct Visitor;
+            impl<'de> de::Visitor<'de> for Visitor {
+                type Value = Size;
+
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str("array")
+                }
+
+                fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+                where
+                    A: serde::de::SeqAccess<'de>
+                {
+                    Ok(Size(seq.size_hint().unwrap()))
+                }
+            }
+            deserializer.deserialize_seq(Visitor)
+        }
+    }
+
+    deserializes_to("[]", Size(0));
+    deserializes_to("[42, true, 'hello']", Size(3));
+    deserializes_to("[42, true, [1, 2]]", Size(3));
 }
 
 #[test]
@@ -332,6 +367,39 @@ fn deserializes_map() {
     m.insert("c".to_owned(), 3);
 
     deserializes_to("{ a: 1, 'b': 2, \"c\": 3 }", m);
+}
+
+#[test]
+fn deserializes_map_size_hint() {
+    #[derive(Debug, PartialEq)]
+    struct Size(usize);
+    impl<'de> de::Deserialize<'de> for Size {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            struct Visitor;
+            impl<'de> de::Visitor<'de> for Visitor {
+                type Value = Size;
+
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str("array")
+                }
+
+                fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+                where
+                    A: serde::de::MapAccess<'de>
+                {
+                    Ok(Size(map.size_hint().unwrap()))
+                }
+            }
+            deserializer.deserialize_map(Visitor)
+        }
+    }
+
+    deserializes_to("{}", Size(0));
+    deserializes_to("{ a: 1, 'b': 2, \"c\": 3 }", Size(3));
+    deserializes_to("{ a: 1, 'b': 2, \"c\": [1, 2] }", Size(3));
 }
 
 #[test]
