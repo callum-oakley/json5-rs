@@ -286,7 +286,9 @@ struct Seq<'de> {
 
 impl<'de> Seq<'de> {
     pub fn new(pair: Pair<'de, Rule>) -> Self {
-        Self { pairs: pair.into_inner().into_iter().collect() }
+        Self {
+            pairs: pair.into_inner().into_iter().collect(),
+        }
     }
 }
 
@@ -316,7 +318,9 @@ struct Map<'de> {
 
 impl<'de> Map<'de> {
     pub fn new(pair: Pair<'de, Rule>) -> Self {
-        Self { pairs: pair.into_inner().into_iter().collect() }
+        Self {
+            pairs: pair.into_inner().into_iter().collect(),
+        }
     }
 }
 
@@ -343,7 +347,9 @@ impl<'de> de::MapAccess<'de> for Map<'de> {
     where
         V: de::DeserializeSeed<'de>,
     {
-        seed.deserialize(&mut Deserializer::from_pair(self.pairs.pop_front().unwrap()))
+        seed.deserialize(&mut Deserializer::from_pair(
+            self.pairs.pop_front().unwrap(),
+        ))
     }
 }
 
@@ -405,7 +411,7 @@ impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
             Some(pair) => match pair.as_rule() {
                 Rule::array => visitor.visit_seq(Seq::new(pair)),
                 _ => Err(de::Error::custom("expected an array")),
-            }
+            },
             None => Err(de::Error::custom("expected an array")),
         }
     }
@@ -418,7 +424,7 @@ impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
             Some(pair) => match pair.as_rule() {
                 Rule::object => visitor.visit_map(Map::new(pair)),
                 _ => Err(de::Error::custom("expected an object")),
-            }
+            },
             None => Err(de::Error::custom("expected an object")),
         }
     }

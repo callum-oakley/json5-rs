@@ -1,5 +1,5 @@
 use serde::de;
-use serde_derive::{Deserialize};
+use serde_derive::Deserialize;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -328,7 +328,7 @@ fn deserializes_seq_size_hint() {
 
                 fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
                 where
-                    A: serde::de::SeqAccess<'de>
+                    A: serde::de::SeqAccess<'de>,
                 {
                     Ok(Size(seq.size_hint().unwrap()))
                 }
@@ -388,7 +388,7 @@ fn deserializes_map_size_hint() {
 
                 fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
                 where
-                    A: serde::de::MapAccess<'de>
+                    A: serde::de::MapAccess<'de>,
                 {
                     Ok(Size(map.size_hint().unwrap()))
                 }
@@ -423,14 +423,14 @@ fn deserializes_enum() {
         C(i32, i32),
         D { a: i32, b: i32 },
         E {},
-        F (),
+        F(),
     }
 
     deserializes_to("'A'", E::A);
     deserializes_to("{ B: 2 }", E::B(2));
     deserializes_to("{ C: [3, 5] }", E::C(3, 5));
     deserializes_to("{ D: { a: 7, b: 11 } }", E::D { a: 7, b: 11 });
-    deserializes_to("{ E: {} }", E::E{});
+    deserializes_to("{ E: {} }", E::E {});
     deserializes_to("{ F: [] }", E::F());
 }
 
@@ -439,13 +439,15 @@ fn deserializes_enum_with_error() {
     #[derive(Deserialize, PartialEq, Debug)]
     enum E {
         A {},
-        B (),
+        B(),
     }
 
     #[derive(Deserialize, PartialEq, Debug)]
-    struct S { e: E }
+    struct S {
+        e: E,
+    }
 
-    deserializes_with_error("{ e: 'A' }", S { e: E::A{} }, "expected an object");
+    deserializes_with_error("{ e: 'A' }", S { e: E::A {} }, "expected an object");
     deserializes_with_error("{ e: 'B' }", S { e: E::B() }, "expected an array");
 }
 
