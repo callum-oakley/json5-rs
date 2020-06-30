@@ -4,6 +4,7 @@ use pest_derive::Parser;
 use serde::de;
 use serde::forward_to_deserialize_any;
 use std::char;
+use std::collections::VecDeque;
 use std::f64;
 
 use crate::error::{Error, Result};
@@ -58,12 +59,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
                     visitor.visit_f64(parse_number(&pair)?)
                 }
             }
-            Rule::array => visitor.visit_seq(Seq {
-                pairs: pair.into_inner(),
-            }),
-            Rule::object => visitor.visit_map(Map {
-                pairs: pair.into_inner(),
-            }),
+            Rule::array => visitor.visit_seq(Seq::new(pair)),
+            Rule::object => visitor.visit_map(Map::new(pair)),
             _ => unreachable!(),
         }
     }
@@ -284,17 +281,27 @@ fn is_hex_literal(s: &str) -> bool {
 }
 
 struct Seq<'de> {
-    pairs: Pairs<'de, Rule>,
+    pairs: VecDeque<Pair<'de, Rule>>,
+}
+
+impl<'de> Seq<'de> {
+    pub fn new(pair: Pair<'de, Rule>) -> Self {
+        Self { pairs: pair.into_inner().into_iter().collect() }
+    }
 }
 
 impl<'de> de::SeqAccess<'de> for Seq<'de> {
     type Error = Error;
 
+    fn size_hint(&self) -> Option<usize> {
+        Some(self.pairs.len())
+    }
+
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
     where
         T: de::DeserializeSeed<'de>,
     {
-        if let Some(pair) = self.pairs.next() {
+        if let Some(pair) = self.pairs.pop_front() {
             seed.deserialize(&mut Deserializer::from_pair(pair))
                 .map(Some)
         } else {
@@ -304,17 +311,27 @@ impl<'de> de::SeqAccess<'de> for Seq<'de> {
 }
 
 struct Map<'de> {
-    pairs: Pairs<'de, Rule>,
+    pairs: VecDeque<Pair<'de, Rule>>,
+}
+
+impl<'de> Map<'de> {
+    pub fn new(pair: Pair<'de, Rule>) -> Self {
+        Self { pairs: pair.into_inner().into_iter().collect() }
+    }
 }
 
 impl<'de> de::MapAccess<'de> for Map<'de> {
     type Error = Error;
 
+    fn size_hint(&self) -> Option<usize> {
+        Some(self.pairs.len() / 2)
+    }
+
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
     where
         K: de::DeserializeSeed<'de>,
     {
-        if let Some(pair) = self.pairs.next() {
+        if let Some(pair) = self.pairs.pop_front() {
             seed.deserialize(&mut Deserializer::from_pair(pair))
                 .map(Some)
         } else {
@@ -326,7 +343,7 @@ impl<'de> de::MapAccess<'de> for Map<'de> {
     where
         V: de::DeserializeSeed<'de>,
     {
-        seed.deserialize(&mut Deserializer::from_pair(self.pairs.next().unwrap()))
+        seed.deserialize(&mut Deserializer::from_pair(self.pairs.pop_front().unwrap()))
     }
 }
 
@@ -386,9 +403,7 @@ impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
     {
         match self.pair {
             Some(pair) => match pair.as_rule() {
-                Rule::array => visitor.visit_seq(Seq {
-                    pairs: pair.into_inner(),
-                }),
+                Rule::array => visitor.visit_seq(Seq::new(pair)),
                 _ => Err(de::Error::custom("expected an array")),
             }
             None => Err(de::Error::custom("expected an array")),
@@ -401,9 +416,7 @@ impl<'de, 'a> de::VariantAccess<'de> for Variant<'de> {
     {
         match self.pair {
             Some(pair) => match pair.as_rule() {
-                Rule::object => visitor.visit_map(Map {
-                    pairs: pair.into_inner(),
-                }),
+                Rule::object => visitor.visit_map(Map::new(pair)),
                 _ => Err(de::Error::custom("expected an object")),
             }
             None => Err(de::Error::custom("expected an object")),
