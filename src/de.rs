@@ -1,4 +1,4 @@
-use pest::iterators::{Pair, Pairs};
+use pest::iterators::Pair;
 use pest::Parser as P;
 use pest_derive::Parser;
 use serde::de;
@@ -264,7 +264,7 @@ fn parse_integer(pair: &Pair<'_, Rule>) -> Result<i64> {
         s if is_hex_literal(s) => Ok(parse_hex(&s[2..])? as i64),
         s => s
             .parse()
-            .or(Err(de::Error::custom("error parsing integer"))),
+            .or_else(|_| Err(de::Error::custom("error parsing integer"))),
     }
 }
 
@@ -273,7 +273,7 @@ fn is_int(s: &str) -> bool {
 }
 
 fn parse_hex(s: &str) -> Result<u32> {
-    u32::from_str_radix(s, 16).or(Err(de::Error::custom("error parsing hex")))
+    u32::from_str_radix(s, 16).or_else(|_| Err(de::Error::custom("error parsing hex")))
 }
 
 fn is_hex_literal(s: &str) -> bool {
@@ -287,7 +287,7 @@ struct Seq<'de> {
 impl<'de> Seq<'de> {
     pub fn new(pair: Pair<'de, Rule>) -> Self {
         Self {
-            pairs: pair.into_inner().into_iter().collect(),
+            pairs: pair.into_inner().collect(),
         }
     }
 }
@@ -319,7 +319,7 @@ struct Map<'de> {
 impl<'de> Map<'de> {
     pub fn new(pair: Pair<'de, Rule>) -> Self {
         Self {
-            pairs: pair.into_inner().into_iter().collect(),
+            pairs: pair.into_inner().collect(),
         }
     }
 }

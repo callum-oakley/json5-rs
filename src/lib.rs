@@ -36,25 +36,23 @@
 //!     n: i32,
 //! }
 //!
-//! fn main() {
-//!     let config = "
-//!         {
-//!           // A traditional message.
-//!           message: 'hello world',
+//! let config = "
+//!     {
+//!       // A traditional message.
+//!       message: 'hello world',
 //!
-//!           // A number for some reason.
-//!           n: 42,
-//!         }
-//!     ";
+//!       // A number for some reason.
+//!       n: 42,
+//!     }
+//! ";
 //!
-//!     assert_eq!(
-//!         json5::from_str(config),
-//!         Ok(Config {
-//!             message: "hello world".to_string(),
-//!             n: 42,
-//!         }),
-//!     );
-//! }
+//! assert_eq!(
+//!     json5::from_str(config),
+//!     Ok(Config {
+//!         message: "hello world".to_string(),
+//!         n: 42,
+//!     }),
+//! );
 //! ```
 //!
 //! There are many ways to customise the deserialization (e.g. deserializing `camelCase` field
@@ -79,16 +77,14 @@
 //!     String(String),
 //! }
 //!
-//! fn main() {
-//!     assert_eq!(
-//!         json5::to_string(&vec![
-//!             Val::Number(42.),
-//!             Val::Bool(true),
-//!             Val::String("hello".to_owned()),
-//!         ]),
-//!         Ok("[42,true,\"hello\"]".to_owned()),
-//!     )
-//! }
+//! assert_eq!(
+//!     json5::to_string(&vec![
+//!         Val::Number(42.),
+//!         Val::Bool(true),
+//!         Val::String("hello".to_owned()),
+//!     ]),
+//!     Ok("[42,true,\"hello\"]".to_owned()),
+//! )
 //! ```
 //!
 //! There are many ways to customise the serialization (e.g. serializing `snake_case` struct fields
