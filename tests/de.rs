@@ -199,6 +199,7 @@ fn deserializes_f32() {
     deserializes_to("Infinity", std::f32::INFINITY);
     deserializes_to("-Infinity", std::f32::NEG_INFINITY);
     deserializes_to_nan_f32("NaN");
+    deserializes_to_nan_f32("-NaN");
 }
 
 #[test]
@@ -220,6 +221,7 @@ fn deserializes_f64() {
     deserializes_to("Infinity", std::f64::INFINITY);
     deserializes_to("-Infinity", std::f64::NEG_INFINITY);
     deserializes_to_nan_f64("NaN");
+    deserializes_to_nan_f64("-NaN");
 }
 
 #[test]
