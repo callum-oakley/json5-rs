@@ -113,12 +113,13 @@
 //!         Val::Bool(true),
 //!         Val::Number(42.),
 //!         Val::Number(42.42),
+//!         Val::Number(f64::NAN),
 //!         Val::String("hello".to_owned()),
 //!     ])
 //! );
 //! assert_eq!(
 //!     json5::to_string(&Val::Object(map)),
-//!     Ok("{\"a\":[null,true,42,42.42,\"hello\"]}".to_owned()),
+//!     Ok("{\"a\":[null,true,42,42.42,NaN,\"hello\"]}".to_owned()),
 //! )
 //! ```
 //!
@@ -128,9 +129,9 @@
 //! use serde_json::{json, Value, Map, Number};
 //! assert_eq!(
 //!     json5::to_string(
-//!         &json!({"a": [null, true, 42, 42.42, "hello"]})
+//!         &json!({"a": [null, true, 42, 42.42, f64::NAN, "hello"]})
 //!     ),
-//!     Ok("{\"a\":[null,true,42,42.42,\"hello\"]}".to_owned())
+//!     Ok("{\"a\":[null,true,42,42.42,null,\"hello\"]}".to_owned())
 //! );
 //! let mut map = Map::new();
 //! map.insert(

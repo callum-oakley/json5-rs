@@ -1,7 +1,20 @@
 use json5;
 use serde;
+use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use std::f64;
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[serde(untagged)]
+pub enum Val {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<Val>),
+    Object(HashMap<String, Val>),
+}
 
 #[allow(dead_code)]
 pub fn deserializes_to<'a, T>(s: &'a str, v: T)
