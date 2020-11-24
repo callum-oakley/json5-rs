@@ -33,7 +33,7 @@ pub enum Error {
         /// The error message.
         msg: String,
         /// The location of the error, if applicable.
-        location: Option<Location>
+        location: Option<Location>,
     },
 }
 
@@ -43,19 +43,28 @@ impl From<pest::error::Error<Rule>> for Error {
             pest::error::LineColLocation::Pos((l, c)) => (l, c),
             pest::error::LineColLocation::Span((l, c), (_, _)) => (l, c),
         };
-        Error::Message { msg: err.to_string(), location: Some(Location { line, column }) }
+        Error::Message {
+            msg: err.to_string(),
+            location: Some(Location { line, column }),
+        }
     }
 }
 
 impl ser::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
-        Error::Message { msg: msg.to_string(), location: None }
+        Error::Message {
+            msg: msg.to_string(),
+            location: None,
+        }
     }
 }
 
 impl de::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
-        Error::Message { msg: msg.to_string(), location: None }
+        Error::Message {
+            msg: msg.to_string(),
+            location: None,
+        }
     }
 }
 

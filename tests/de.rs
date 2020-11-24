@@ -324,12 +324,17 @@ fn deserializes_char() {
 fn deserializes_str() {
     deserializes_to("'Hello!'", "Hello!");
     deserializes_to("\"안녕하세요\"", "안녕하세요");
+    deserializes_to(r#""\uD83C\uDDEF\uD83C\uDDF5""#, "\u{1F1EF}\u{1F1F5}");
 }
 
 #[test]
 fn deserializes_string() {
     deserializes_to("'Hello!'", "Hello!".to_owned());
     deserializes_to("\"안녕하세요\"", "안녕하세요".to_owned());
+    deserializes_to(
+        r#""\uD83C\uDDEF\uD83C\uDDF5""#,
+        "\u{1F1EF}\u{1F1F5}".to_owned(),
+    );
 
     error_struct!(&str, visit_str, deserialize_string);
     deserializes_with_error::<A>("\n 'Hello!'", make_error("oops", 2, 2));
