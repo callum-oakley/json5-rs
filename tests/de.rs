@@ -8,12 +8,46 @@ mod common;
 
 use crate::common::{
     deserializes_to, deserializes_to_nan_f32, deserializes_to_nan_f64, deserializes_with_error,
+    make_error,
 };
+
+/// Defines a struct `A` with a `de::Deserializer` implementation that returns an error. Works for
+/// visitors that accept a single value.
+macro_rules! error_struct {
+    ($type:ty, $visit_fn:ident, $deserialize_fn:ident) => {
+        #[derive(Debug, PartialEq)]
+        struct A;
+        impl<'de> de::Deserialize<'de> for A {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: de::Deserializer<'de>,
+            {
+                struct Visitor;
+                impl<'de> de::Visitor<'de> for Visitor {
+                    type Value = A;
+                    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        f.write_str("...")
+                    }
+                    fn $visit_fn<E>(self, _v: $type) -> Result<Self::Value, E>
+                    where
+                        E: de::Error,
+                    {
+                        Err(de::Error::custom("oops"))
+                    }
+                }
+                deserializer.$deserialize_fn(Visitor)
+            }
+        }
+    };
+}
 
 #[test]
 fn deserializes_bool() {
     deserializes_to("true", true);
     deserializes_to("false", false);
+
+    error_struct!(bool, visit_bool, deserialize_bool);
+    deserializes_with_error::<A>("\n true", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -38,6 +72,9 @@ fn deserializes_i8() {
     deserializes_to("-4.2e1", -x);
     deserializes_to("-.42e2", -x);
     deserializes_to("-0.42e2", -x);
+
+    error_struct!(i8, visit_i8, deserialize_i8);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -55,6 +92,9 @@ fn deserializes_u8() {
     deserializes_to("4.2e1", x);
     deserializes_to(".42e2", x);
     deserializes_to("0.42e2", x);
+
+    error_struct!(u8, visit_u8, deserialize_u8);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -79,6 +119,9 @@ fn deserializes_i16() {
     deserializes_to("-4.2e1", -x);
     deserializes_to("-.42e2", -x);
     deserializes_to("-0.42e2", -x);
+
+    error_struct!(i16, visit_i16, deserialize_i16);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -96,6 +139,9 @@ fn deserializes_u16() {
     deserializes_to("4.2e1", x);
     deserializes_to(".42e2", x);
     deserializes_to("0.42e2", x);
+
+    error_struct!(u16, visit_u16, deserialize_u16);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -120,6 +166,9 @@ fn deserializes_i32() {
     deserializes_to("-4.2e1", -x);
     deserializes_to("-.42e2", -x);
     deserializes_to("-0.42e2", -x);
+
+    error_struct!(i32, visit_i32, deserialize_i32);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -137,6 +186,9 @@ fn deserializes_u32() {
     deserializes_to("4.2e1", x);
     deserializes_to(".42e2", x);
     deserializes_to("0.42e2", x);
+
+    error_struct!(u32, visit_u32, deserialize_u32);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -161,6 +213,14 @@ fn deserializes_i64() {
     deserializes_to("-4.2e1", -x);
     deserializes_to("-.42e2", -x);
     deserializes_to("-0.42e2", -x);
+
+    error_struct!(i64, visit_i64, deserialize_i64);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    let over_i64 = format!("\n {}0", i64::max_value());
+    deserializes_with_error::<serde_json::Value>(
+        over_i64.as_str(),
+        make_error("error parsing integer", 2, 2),
+    );
 }
 
 #[test]
@@ -178,6 +238,13 @@ fn deserializes_u64() {
     deserializes_to("4.2e1", x);
     deserializes_to(".42e2", x);
     deserializes_to("0.42e2", x);
+
+    deserializes_to("Infinity", std::f32::INFINITY);
+    deserializes_to("-Infinity", std::f32::NEG_INFINITY);
+    deserializes_to_nan_f32("NaN");
+
+    error_struct!(u64, visit_u64, deserialize_u64);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -199,6 +266,9 @@ fn deserializes_f32() {
     deserializes_to("Infinity", std::f32::INFINITY);
     deserializes_to("-Infinity", std::f32::NEG_INFINITY);
     deserializes_to_nan_f32("NaN");
+
+    error_struct!(f32, visit_f32, deserialize_f32);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -220,6 +290,10 @@ fn deserializes_f64() {
     deserializes_to("Infinity", std::f64::INFINITY);
     deserializes_to("-Infinity", std::f64::NEG_INFINITY);
     deserializes_to_nan_f64("NaN");
+
+    error_struct!(f64, visit_f64, deserialize_f64);
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<f64>("\n 1e309", make_error("error parsing number: too large", 2, 2));
 }
 
 #[test]
@@ -234,6 +308,10 @@ fn deserializes_char() {
     deserializes_to(r#""\/""#, '/');
     deserializes_to(r#""\b""#, '\u{0008}');
     deserializes_to(r#""\f""#, '\u{000c}');
+
+    // `deserialize_char` calls `visit_str`
+    error_struct!(&str, visit_str, deserialize_char);
+    deserializes_with_error::<A>("\n 'x'", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -247,6 +325,9 @@ fn deserializes_str() {
 fn deserializes_string() {
     deserializes_to("'Hello!'", "Hello!".to_owned());
     deserializes_to("\"안녕하세요\"", "안녕하세요".to_owned());
+
+    error_struct!(&str, visit_str, deserialize_string);
+    deserializes_with_error::<A>("\n 'Hello!'", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -265,15 +346,68 @@ fn deserializes_option() {
 }
 
 #[test]
-fn deserializes_unit() {
-    deserializes_to("null", ());
+fn deserializes_option_error() {
+    #[derive(Debug, PartialEq)]
+    struct A;
+    impl<'de> de::Deserialize<'de> for A {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            struct Visitor;
+            impl<'de> de::Visitor<'de> for Visitor {
+                type Value = A;
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str("...")
+                }
+                fn visit_some<D>(self, _deserializer: D) -> Result<Self::Value, D::Error>
+                where
+                    D: de::Deserializer<'de>,
+                {
+                    Err(de::Error::custom("oops"))
+                }
+            }
+            deserializer.deserialize_option(Visitor)
+        }
+    }
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
-fn deserializes_unit_struct() {
-    #[derive(Deserialize, PartialEq, Debug)]
+fn deserializes_unit() {
+    deserializes_to("null", ());
+
+    #[derive(Deserialize, Debug, PartialEq)]
     struct A;
     deserializes_to("null", A);
+}
+
+#[test]
+fn deserializes_unit_error() {
+    #[derive(Debug, PartialEq)]
+    struct A;
+    impl<'de> de::Deserialize<'de> for A {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            struct Visitor;
+            impl<'de> de::Visitor<'de> for Visitor {
+                type Value = A;
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str("...")
+                }
+                fn visit_unit<E>(self) -> Result<Self::Value, E>
+                where
+                    E: de::Error,
+                {
+                    Err(de::Error::custom("oops"))
+                }
+            }
+            deserializer.deserialize_unit(Visitor)
+        }
+    }
+    deserializes_with_error::<A>("\n null", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -286,6 +420,34 @@ fn deserializes_newtype_struct() {
 
     deserializes_to("42", A(42));
     deserializes_to("42", B(42.));
+}
+
+#[test]
+fn deserializes_newtype_struct_error() {
+    #[derive(Debug, PartialEq)]
+    struct A;
+    impl<'de> de::Deserialize<'de> for A {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            struct Visitor;
+            impl<'de> de::Visitor<'de> for Visitor {
+                type Value = A;
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str("...")
+                }
+                fn visit_newtype_struct<D>(self, _deserializer: D) -> Result<Self::Value, D::Error>
+                where
+                    D: de::Deserializer<'de>,
+                {
+                    Err(de::Error::custom("oops"))
+                }
+            }
+            deserializer.deserialize_newtype_struct("A", Visitor)
+        }
+    }
+    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -323,12 +485,12 @@ fn deserializes_seq_size_hint() {
                 type Value = Size;
 
                 fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    f.write_str("array")
+                    f.write_str("...")
                 }
 
                 fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
                 where
-                    A: serde::de::SeqAccess<'de>,
+                    A: de::SeqAccess<'de>,
                 {
                     Ok(Size(seq.size_hint().unwrap()))
                 }
@@ -340,6 +502,34 @@ fn deserializes_seq_size_hint() {
     deserializes_to("[]", Size(0));
     deserializes_to("[42, true, 'hello']", Size(3));
     deserializes_to("[42, true, [1, 2]]", Size(3));
+}
+
+#[test]
+fn deserializes_seq_error() {
+    #[derive(Debug, PartialEq)]
+    struct A;
+    impl<'de> de::Deserialize<'de> for A {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            struct Visitor;
+            impl<'de> de::Visitor<'de> for Visitor {
+                type Value = A;
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str("...")
+                }
+                fn visit_seq<A>(self, _a: A) -> Result<Self::Value, A::Error>
+                where
+                    A: de::SeqAccess<'de>,
+                {
+                    Err(de::Error::custom("oops"))
+                }
+            }
+            deserializer.deserialize_seq(Visitor)
+        }
+    }
+    deserializes_with_error::<A>("\n [ true ]", make_error("oops", 2, 2));
 }
 
 #[test]
@@ -360,6 +550,41 @@ fn deserializes_tuple_struct() {
 }
 
 #[test]
+fn deserializes_tuple_error() {
+    #[derive(Debug, PartialEq)]
+    struct A;
+    impl<'de> de::Deserialize<'de> for A {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            struct Visitor;
+            impl<'de> de::Visitor<'de> for Visitor {
+                type Value = A;
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str("...")
+                }
+                fn visit_seq<A>(self, _a: A) -> Result<Self::Value, A::Error>
+                where
+                    A: de::SeqAccess<'de>,
+                {
+                    Err(de::Error::custom("oops"))
+                }
+            }
+            deserializer.deserialize_tuple(2, Visitor)
+        }
+    }
+    deserializes_with_error::<A>("\n [1, 2]", make_error("oops", 2, 2));
+
+    #[derive(Deserialize, Debug, PartialEq)]
+    struct B(i32, f64);
+    deserializes_with_error::<B>(
+        "\n [1]",
+        make_error("invalid length 1, expected tuple struct B with 2 elements", 2, 2),
+    );
+}
+
+#[test]
 fn deserializes_map() {
     let mut m = HashMap::new();
     m.insert("a".to_owned(), 1);
@@ -373,6 +598,7 @@ fn deserializes_map() {
 fn deserializes_map_size_hint() {
     #[derive(Debug, PartialEq)]
     struct Size(usize);
+
     impl<'de> de::Deserialize<'de> for Size {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
@@ -383,12 +609,12 @@ fn deserializes_map_size_hint() {
                 type Value = Size;
 
                 fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    f.write_str("array")
+                    f.write_str("...")
                 }
 
                 fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
                 where
-                    A: serde::de::MapAccess<'de>,
+                    A: de::MapAccess<'de>,
                 {
                     Ok(Size(map.size_hint().unwrap()))
                 }
@@ -403,6 +629,35 @@ fn deserializes_map_size_hint() {
 }
 
 #[test]
+fn deserializes_map_error() {
+    #[derive(Debug, PartialEq)]
+    struct A {}
+    impl<'de> de::Deserialize<'de> for A {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: de::Deserializer<'de>,
+        {
+            struct Visitor;
+            impl<'de> de::Visitor<'de> for Visitor {
+                type Value = A;
+                fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    f.write_str("...")
+                }
+                fn visit_map<A>(self, _a: A) -> Result<Self::Value, A::Error>
+                where
+                    A: de::MapAccess<'de>,
+                {
+                    Err(de::Error::custom("oops"))
+                }
+            }
+            deserializer.deserialize_map(Visitor)
+        }
+    }
+
+    deserializes_with_error::<A>("\n { 'a': true }", make_error("oops", 2, 2));
+}
+
+#[test]
 fn deserializes_struct() {
     #[derive(Deserialize, PartialEq, Debug)]
     struct S {
@@ -412,6 +667,17 @@ fn deserializes_struct() {
     }
 
     deserializes_to("{ a: 1, 'b': 2, \"c\": 3 }", S { a: 1, b: 2, c: 3 });
+}
+
+#[test]
+fn deserializes_struct_error() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct S {
+        a: i32,
+        b: i32,
+        c: i32,
+    }
+    deserializes_with_error::<S>("\n { a: 1, 'b': 2 }", make_error("missing field `c`", 2, 2));
 }
 
 #[test]
@@ -435,7 +701,7 @@ fn deserializes_enum() {
 }
 
 #[test]
-fn deserializes_enum_with_error() {
+fn deserializes_enum_error() {
     #[derive(Deserialize, PartialEq, Debug)]
     enum E {
         A {},
@@ -447,8 +713,12 @@ fn deserializes_enum_with_error() {
         e: E,
     }
 
-    deserializes_with_error("{ e: 'A' }", S { e: E::A {} }, "expected an object");
-    deserializes_with_error("{ e: 'B' }", S { e: E::B() }, "expected an array");
+    deserializes_with_error::<S>("{ e: 'A' }", make_error("expected an object", 1, 6));
+    deserializes_with_error::<S>("{ e: 'B' }", make_error("expected an array", 1, 6));
+    deserializes_with_error::<E>(
+        "\n 'C'",
+        make_error("unknown variant `C`, expected `A` or `B`", 2, 2),
+    );
 }
 
 #[test]
@@ -478,22 +748,19 @@ fn deserializes_json_values() {
 }
 
 #[test]
-fn deserialize_error_messages() {
+fn deserializes_parse_error() {
+    let parse_err_str = r#" --> 1:2
+  |
+1 | {
+  |  ^---
+  |
+  = expected identifier or string"#;
     #[derive(Deserialize, PartialEq, Debug)]
-    enum E {
-        A,
-    }
-    deserializes_with_error("'B'", E::A, "unknown variant `B`, expected `A`");
+    struct A;
+    deserializes_with_error::<A>("{", make_error(parse_err_str, 1, 2));
 
-    deserializes_with_error("0xffffffffff", 42, "error parsing hex");
-
-    let mut over_i64 = i64::max_value().to_string();
-    over_i64.push_str("0");
-    deserializes_with_error(
-        over_i64.as_str(),
-        serde_json::json!(42),
-        "error parsing integer",
+    deserializes_with_error::<bool>(
+        "\n 42",
+        make_error("invalid type: integer `42`, expected a boolean", 2, 2),
     );
-
-    deserializes_with_error("1e309", 42, "error parsing number: too large");
 }
