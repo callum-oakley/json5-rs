@@ -266,6 +266,7 @@ fn deserializes_f32() {
     deserializes_to("Infinity", std::f32::INFINITY);
     deserializes_to("-Infinity", std::f32::NEG_INFINITY);
     deserializes_to_nan_f32("NaN");
+    deserializes_to_nan_f32("-NaN");
 
     error_struct!(f32, visit_f32, deserialize_f32);
     deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
@@ -290,10 +291,14 @@ fn deserializes_f64() {
     deserializes_to("Infinity", std::f64::INFINITY);
     deserializes_to("-Infinity", std::f64::NEG_INFINITY);
     deserializes_to_nan_f64("NaN");
+    deserializes_to_nan_f64("-NaN");
 
     error_struct!(f64, visit_f64, deserialize_f64);
     deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
-    deserializes_with_error::<f64>("\n 1e309", make_error("error parsing number: too large", 2, 2));
+    deserializes_with_error::<f64>(
+        "\n 1e309",
+        make_error("error parsing number: too large", 2, 2),
+    );
 }
 
 #[test]
@@ -580,7 +585,11 @@ fn deserializes_tuple_error() {
     struct B(i32, f64);
     deserializes_with_error::<B>(
         "\n [1]",
-        make_error("invalid length 1, expected tuple struct B with 2 elements", 2, 2),
+        make_error(
+            "invalid length 1, expected tuple struct B with 2 elements",
+            2,
+            2,
+        ),
     );
 }
 

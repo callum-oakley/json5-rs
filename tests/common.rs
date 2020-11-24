@@ -1,5 +1,20 @@
 use json5::{Error, Location};
 use matches::assert_matches;
+use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+use std::f64;
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[serde(untagged)]
+pub enum Val {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<Val>),
+    Object(HashMap<String, Val>),
+}
 
 #[allow(unused)]
 pub fn deserializes_to<'a, T>(s: &'a str, v: T)
@@ -37,5 +52,8 @@ where
 
 #[allow(unused)]
 pub fn make_error(msg: impl Into<String>, line: usize, column: usize) -> Error {
-    Error::Message { msg: msg.into(), location: Some(Location { line, column }) }
+    Error::Message {
+        msg: msg.into(),
+        location: Some(Location { line, column }),
+    }
 }

@@ -353,7 +353,10 @@ fn parse_integer(pair: &Pair<'_, Rule>) -> Result<i64> {
 }
 
 fn is_int(s: &str) -> bool {
-    !s.contains('.') && (is_hex_literal(s) || (!s.contains('e') && !s.contains('E')))
+    !s.contains('.')
+        && (is_hex_literal(s) || (!s.contains('e') && !s.contains('E')))
+        && !is_infinite(s)
+        && !is_nan(s)
 }
 
 fn parse_hex(s: &str) -> Result<u32> {
@@ -362,6 +365,14 @@ fn parse_hex(s: &str) -> Result<u32> {
 
 fn is_hex_literal(s: &str) -> bool {
     s.len() > 2 && (&s[..2] == "0x" || &s[..2] == "0X")
+}
+
+fn is_infinite(s: &str) -> bool {
+    s == "Infinity" || s == "-Infinity"
+}
+
+fn is_nan(s: &str) -> bool {
+    s == "NaN" || s == "-NaN"
 }
 
 struct Seq<'de> {

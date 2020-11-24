@@ -55,7 +55,32 @@
 //! );
 //! ```
 //!
-//! There are many ways to customise the deserialization (e.g. deserializing `camelCase` field
+//! Also, you could deserialize into serde_json::Value
+//!
+//! ```rust
+//! use json5;
+//! use serde_json::{Value, json};
+//!
+//! let config = "
+//!     {
+//!       // A traditional message.
+//!       message: 'hello world',
+//!
+//!       // A number for some reason.
+//!       n: 42,
+//!     }
+//! ";
+//!
+//! assert_eq!(
+//!     json5::from_str::<Value>(&config),
+//!     Ok(json!({
+//!         "message": "hello world",
+//!         "n": 42
+//!     }))
+//! );
+//! ```
+//!
+//! There are many ways to customize the deserialization (e.g. deserializing `camelCase` field
 //! names into a struct with `snake_case` fields). See the Serde docs, especially the
 //! [Attributes][], [Custom serialization][] and [Examples][] sections.
 //!
@@ -68,26 +93,64 @@
 //!
 //! ```rust
 //! use serde_derive::Serialize;
+//! use std::collections::HashMap;
 //!
-//! #[derive(Serialize, PartialEq, Debug)]
+//! #[derive(Serialize, Debug)]
 //! #[serde(untagged)]
 //! enum Val {
-//!     Number(f64),
+//!     Null,
 //!     Bool(bool),
+//!     Number(f64),
 //!     String(String),
+//!     Array(Vec<Val>),
+//!     Object(HashMap<String, Val>),
 //! }
-//!
-//! assert_eq!(
-//!     json5::to_string(&vec![
-//!         Val::Number(42.),
+//! let mut map = HashMap::new();
+//! map.insert(
+//!     "a".to_owned(),
+//!     Val::Array(vec![
+//!         Val::Null,
 //!         Val::Bool(true),
+//!         Val::Number(42.),
+//!         Val::Number(42.42),
+//!         Val::Number(f64::NAN),
 //!         Val::String("hello".to_owned()),
-//!     ]),
-//!     Ok("[42,true,\"hello\"]".to_owned()),
+//!     ])
+//! );
+//! assert_eq!(
+//!     json5::to_string(&Val::Object(map)),
+//!     Ok("{\"a\":[null,true,42,42.42,NaN,\"hello\"]}".to_owned()),
 //! )
 //! ```
 //!
-//! There are many ways to customise the serialization (e.g. serializing `snake_case` struct fields
+//! You could also build from serde_json
+//!
+//! ```rust
+//! use serde_json::{json, Value, Map, Number};
+//! assert_eq!(
+//!     json5::to_string(
+//!         &json!({"a": [null, true, 42, 42.42, f64::NAN, "hello"]})
+//!     ),
+//!     Ok("{\"a\":[null,true,42,42.42,null,\"hello\"]}".to_owned())
+//! );
+//! let mut map = Map::new();
+//! map.insert(
+//!     "a".to_owned(),
+//!     Value::Array(vec![
+//!         Value::Null,
+//!         Value::Bool(true),
+//!         Value::Number(Number::from_f64(42.).unwrap()),
+//!         Value::Number(Number::from_f64(42.42).unwrap()),
+//!         Value::String("hello".to_owned()),
+//!     ])
+//! );
+//! assert_eq!(
+//!     json5::to_string(&Value::Object(map)),
+//!     Ok("{\"a\":[null,true,42,42.42,\"hello\"]}".to_owned()),
+//! )
+//! ```
+//!
+//! There are many ways to customize the serialization (e.g. serializing `snake_case` struct fields
 //! as `camelCase`). See the Serde docs, especially the [Attributes][], [Custom serialization][]
 //! and [Examples][] sections.
 //!
