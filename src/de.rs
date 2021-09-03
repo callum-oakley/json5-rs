@@ -23,14 +23,14 @@ where
     T::deserialize(&mut deserializer)
 }
 
-struct Deserializer<'de> {
+pub struct Deserializer<'de> {
     pair: Option<Pair<'de, Rule>>,
 }
 
 impl<'de> Deserializer<'de> {
     /// Creates a JSON5 deserializer from a `&str`. This parses the input at construction time, so
     /// can fail if the input is not valid JSON5.
-    fn from_str(input: &'de str) -> Result<Self> {
+    pub fn from_str(input: &'de str) -> Result<Self> {
         let pair = Parser::parse(Rule::text, input)?.next().unwrap();
         Ok(Deserializer::from_pair(pair))
     }
