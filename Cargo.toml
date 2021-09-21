@@ -1,6 +1,6 @@
 [package]
 name = "json5"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Callum Oakley <hello@callumoakley.net>"]
 description = "A Rust JSON5 serializer and deserializer which speaks Serde."
 license = "ISC"
