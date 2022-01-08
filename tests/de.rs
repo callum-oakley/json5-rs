@@ -609,6 +609,41 @@ fn deserializes_map() {
 }
 
 #[test]
+fn deserializes_map_strange_keys() {
+    // integer keys
+    let mut m = HashMap::new();
+    m.insert(0, "a".to_owned());
+    m.insert(1, "b".to_owned());
+    m.insert(2, "c".to_owned());
+    deserializes_to(r#"{'0':"a","1":"b","02":"c"}"#, m);
+
+    // option keys
+    let mut m = HashMap::new();
+    m.insert(Some("a".to_owned()), 0);
+    deserializes_to("{a:0}", m);
+
+    // newtype keys
+    #[derive(Debug, PartialEq, Eq, Hash, Deserialize)]
+    struct New(i32);
+    let mut m = HashMap::new();
+    m.insert(New(0), "a".to_owned());
+    deserializes_to("{'0':'a'}", m);
+
+    // enum keys
+    #[derive(Debug, PartialEq, Eq, Hash, Deserialize)]
+    enum Key {
+        A,
+        B,
+        C,
+    }
+    let mut m = HashMap::new();
+    m.insert(Key::A, "a".to_owned());
+    m.insert(Key::B, "b".to_owned());
+    m.insert(Key::C, "c".to_owned());
+    deserializes_to("{'A':'a','B':'b','C':'c'}", m);
+}
+
+#[test]
 fn deserializes_map_size_hint() {
     #[derive(Debug, PartialEq)]
     struct Size(usize);
