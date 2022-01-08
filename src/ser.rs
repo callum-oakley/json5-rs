@@ -115,8 +115,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Ok(())
     }
 
-    fn serialize_bytes(self, _v: &[u8]) -> Result<()> {
-        unimplemented!() // TODO
+    fn serialize_bytes(self, v: &[u8]) -> Result<()> {
+        self.collect_seq(v)
     }
 
     fn serialize_none(self) -> Result<()> {
