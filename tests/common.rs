@@ -1,5 +1,4 @@
 use json5::{Error, Location};
-use matches::assert_matches;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -17,37 +16,51 @@ pub enum Val {
 }
 
 #[allow(unused)]
+#[track_caller]
 pub fn deserializes_to<'a, T>(s: &'a str, v: T)
 where
     T: ::std::fmt::Debug + ::std::cmp::PartialEq + serde::de::Deserialize<'a>,
 {
-    assert_matches!(json5::from_str::<T>(s), Ok(value) if value == v);
+    assert_eq!(json5::from_str::<T>(s).expect("deserialization failed"), v);
 }
 
 #[allow(unused)]
-pub fn deserializes_to_nan_f32<'a>(s: &'a str) {
-    assert_matches!(json5::from_str::<f32>(s), Ok(value) if value.is_nan());
+#[track_caller]
+pub fn deserializes_to_nan_f32(s: &str) {
+    let float = json5::from_str::<f32>(s).expect("f32 deserialization failed");
+    if !float.is_nan() {
+        panic!("assertion failed: {}.is_nan()", float);
+    }
 }
 
 #[allow(unused)]
-pub fn deserializes_to_nan_f64<'a>(s: &'a str) {
-    assert_matches!(json5::from_str::<f64>(s), Ok(value) if value.is_nan());
+#[track_caller]
+pub fn deserializes_to_nan_f64(s: &str) {
+    let float = json5::from_str::<f64>(s).expect("f64 deserialization failed");
+    if !float.is_nan() {
+        panic!("assertion failed: {}.is_nan()", float);
+    }
 }
 
 #[allow(unused)]
+#[track_caller]
 pub fn deserializes_with_error<'a, T>(s: &'a str, error_expected: Error)
 where
     T: ::std::fmt::Debug + ::std::cmp::PartialEq + serde::de::Deserialize<'a>,
 {
-    assert_matches!(json5::from_str::<T>(s), Err(e) if e == error_expected);
+    assert_eq!(
+        json5::from_str::<T>(s).expect_err("deserialization succeeded"),
+        error_expected
+    );
 }
 
 #[allow(unused)]
+#[track_caller]
 pub fn serializes_to<T>(v: T, s: &'static str)
 where
     T: ::std::fmt::Debug + ::std::cmp::PartialEq + serde::ser::Serialize,
 {
-    assert_matches!(json5::to_string::<T>(&v), Ok(value) if value == s);
+    assert_eq!(json5::to_string::<T>(&v).expect("serialization failed"), s);
 }
 
 #[allow(unused)]
