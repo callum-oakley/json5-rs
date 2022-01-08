@@ -8,11 +8,19 @@ pub fn to_string<T>(value: &T) -> Result<String>
 where
     T: Serialize,
 {
+    Ok(String::from_utf8(to_bytes(value)?).expect("serialization emitted invalid UTF-8"))
+}
+
+/// Attempts to serialize the input as a JSON5 byte sequence.
+pub fn to_bytes<T>(value: &T) -> Result<Vec<u8>>
+where
+    T: Serialize,
+{
     let mut serializer = Serializer {
         output: Vec::with_capacity(128),
     };
     value.serialize(&mut serializer)?;
-    Ok(String::from_utf8(serializer.output).expect("serialization emitted invalid UTF-8"))
+    Ok(serializer.output)
 }
 
 struct Serializer {
