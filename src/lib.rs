@@ -119,7 +119,7 @@
 //! );
 //! assert_eq!(
 //!     json5::to_string(&Val::Object(map)),
-//!     Ok("{\"a\":[null,true,42,42.42,NaN,\"hello\"]}".to_owned()),
+//!     Ok("{\"a\":[null,true,42.0,42.42,NaN,\"hello\"]}".to_owned()),
 //! )
 //! ```
 //!
@@ -146,7 +146,7 @@
 //! );
 //! assert_eq!(
 //!     json5::to_string(&Value::Object(map)),
-//!     Ok("{\"a\":[null,true,42,42.42,\"hello\"]}".to_owned()),
+//!     Ok("{\"a\":[null,true,42.0,42.42,\"hello\"]}".to_owned()),
 //! )
 //! ```
 //!

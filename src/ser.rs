@@ -21,11 +21,8 @@ struct Serializer {
 }
 
 impl Serializer {
-    fn call_to_string<T>(&mut self, v: &T) -> Result<()>
-    where
-        T: ToString,
-    {
-        self.output += &v.to_string();
+    fn serialize_integer<I: itoa::Integer>(&mut self, v: I) -> Result<()> {
+        self.output.push_str(itoa::Buffer::new().format(v));
         Ok(())
     }
 }
@@ -43,39 +40,40 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeStructVariant = Self;
 
     fn serialize_bool(self, v: bool) -> Result<()> {
-        self.call_to_string(&v)
+        self.output.push_str(if v { "true" } else { "false" });
+        Ok(())
     }
 
     fn serialize_i8(self, v: i8) -> Result<()> {
-        self.call_to_string(&v)
+        self.serialize_integer(v)
     }
 
     fn serialize_i16(self, v: i16) -> Result<()> {
-        self.call_to_string(&v)
+        self.serialize_integer(v)
     }
 
     fn serialize_i32(self, v: i32) -> Result<()> {
-        self.call_to_string(&v)
+        self.serialize_integer(v)
     }
 
     fn serialize_i64(self, v: i64) -> Result<()> {
-        self.call_to_string(&v)
+        self.serialize_integer(v)
     }
 
     fn serialize_u8(self, v: u8) -> Result<()> {
-        self.call_to_string(&v)
+        self.serialize_integer(v)
     }
 
     fn serialize_u16(self, v: u16) -> Result<()> {
-        self.call_to_string(&v)
+        self.serialize_integer(v)
     }
 
     fn serialize_u32(self, v: u32) -> Result<()> {
-        self.call_to_string(&v)
+        self.serialize_integer(v)
     }
 
     fn serialize_u64(self, v: u64) -> Result<()> {
-        self.call_to_string(&v)
+        self.serialize_integer(v)
     }
 
     fn serialize_f32(self, v: f32) -> Result<()> {
@@ -86,7 +84,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         } else if v.is_nan() {
             self.output += "NaN";
         } else {
-            self.call_to_string(&v)?;
+            self.output.push_str(ryu::Buffer::new().format_finite(v));
         }
         Ok(())
     }
@@ -99,18 +97,18 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         } else if v.is_nan() {
             self.output += "NaN";
         } else {
-            self.call_to_string(&v)?;
+            self.output.push_str(ryu::Buffer::new().format_finite(v));
         }
         Ok(())
     }
 
     fn serialize_char(self, v: char) -> Result<()> {
-        self.serialize_str(&v.to_string())
+        self.serialize_str(v.encode_utf8(&mut [0; 4]))
     }
 
     fn serialize_str(self, v: &str) -> Result<()> {
         self.output += "\"";
-        self.output += &escape(v);
+        escape(v, &mut self.output);
         self.output += "\"";
         Ok(())
     }
@@ -357,18 +355,18 @@ impl<'a> ser::SerializeStructVariant for &'a mut Serializer {
     }
 }
 
-fn escape(v: &str) -> String {
-    v.chars()
-        .flat_map(|c| match c {
-            '"' => vec!['\\', c],
-            '\n' => vec!['\\', 'n'],
-            '\r' => vec!['\\', 'r'],
-            '\t' => vec!['\\', 't'],
-            '/' => vec!['\\', '/'],
-            '\\' => vec!['\\', '\\'],
-            '\u{0008}' => vec!['\\', 'b'],
-            '\u{000c}' => vec!['\\', 'f'],
-            c => vec![c],
-        })
-        .collect()
+fn escape(v: &str, buffer: &mut String) {
+    for c in v.chars() {
+        match c {
+            '"' => buffer.push_str("\\\""),
+            '\n' => buffer.push_str("\\n"),
+            '\r' => buffer.push_str("\\r"),
+            '\t' => buffer.push_str("\\t"),
+            '/' => buffer.push_str("\\/"),
+            '\\' => buffer.push_str("\\\\"),
+            '\u{0008}' => buffer.push_str("\\b"),
+            '\u{000c}' => buffer.push_str("\\f"),
+            c => buffer.push(c),
+        }
+    }
 }
