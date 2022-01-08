@@ -8,7 +8,6 @@ mod common;
 
 use crate::common::{
     deserializes_to, deserializes_to_nan_f32, deserializes_to_nan_f64, deserializes_with_error,
-    make_error,
 };
 
 /// Defines a struct `A` with a `de::Deserializer` implementation that returns an error. Works for
@@ -47,7 +46,7 @@ fn deserializes_bool() {
     deserializes_to("false", false);
 
     error_struct!(bool, visit_bool, deserialize_bool);
-    deserializes_with_error::<A>("\n true", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n true", "oops", 2, 2);
 }
 
 #[test]
@@ -74,7 +73,7 @@ fn deserializes_i8() {
     deserializes_to("-0.42e2", -x);
 
     error_struct!(i8, visit_i8, deserialize_i8);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -94,7 +93,7 @@ fn deserializes_u8() {
     deserializes_to("0.42e2", x);
 
     error_struct!(u8, visit_u8, deserialize_u8);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -121,7 +120,7 @@ fn deserializes_i16() {
     deserializes_to("-0.42e2", -x);
 
     error_struct!(i16, visit_i16, deserialize_i16);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -141,7 +140,7 @@ fn deserializes_u16() {
     deserializes_to("0.42e2", x);
 
     error_struct!(u16, visit_u16, deserialize_u16);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -168,7 +167,7 @@ fn deserializes_i32() {
     deserializes_to("-0.42e2", -x);
 
     error_struct!(i32, visit_i32, deserialize_i32);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -188,7 +187,7 @@ fn deserializes_u32() {
     deserializes_to("0.42e2", x);
 
     error_struct!(u32, visit_u32, deserialize_u32);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -215,12 +214,9 @@ fn deserializes_i64() {
     deserializes_to("-0.42e2", -x);
 
     error_struct!(i64, visit_i64, deserialize_i64);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
     let over_i64 = format!("\n {}0", i64::max_value());
-    deserializes_with_error::<serde_json::Value>(
-        over_i64.as_str(),
-        make_error("error parsing integer", 2, 2),
-    );
+    deserializes_with_error::<serde_json::Value>(over_i64.as_str(), "error parsing integer", 2, 2);
 }
 
 #[test]
@@ -244,7 +240,7 @@ fn deserializes_u64() {
     deserializes_to_nan_f32("NaN");
 
     error_struct!(u64, visit_u64, deserialize_u64);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -269,7 +265,7 @@ fn deserializes_f32() {
     deserializes_to_nan_f32("-NaN");
 
     error_struct!(f32, visit_f32, deserialize_f32);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -294,11 +290,8 @@ fn deserializes_f64() {
     deserializes_to_nan_f64("-NaN");
 
     error_struct!(f64, visit_f64, deserialize_f64);
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
-    deserializes_with_error::<f64>(
-        "\n 1e309",
-        make_error("error parsing number: too large", 2, 2),
-    );
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
+    deserializes_with_error::<f64>("\n 1e309", "error parsing number: too large", 2, 2);
 }
 
 #[test]
@@ -316,7 +309,7 @@ fn deserializes_char() {
 
     // `deserialize_char` calls `visit_str`
     error_struct!(&str, visit_str, deserialize_char);
-    deserializes_with_error::<A>("\n 'x'", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 'x'", "oops", 2, 2);
 }
 
 #[test]
@@ -337,7 +330,7 @@ fn deserializes_string() {
     );
 
     error_struct!(&str, visit_str, deserialize_string);
-    deserializes_with_error::<A>("\n 'Hello!'", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 'Hello!'", "oops", 2, 2);
 }
 
 #[test]
@@ -380,7 +373,7 @@ fn deserializes_option_error() {
             deserializer.deserialize_option(Visitor)
         }
     }
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -417,7 +410,7 @@ fn deserializes_unit_error() {
             deserializer.deserialize_unit(Visitor)
         }
     }
-    deserializes_with_error::<A>("\n null", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n null", "oops", 2, 2);
 }
 
 #[test]
@@ -457,7 +450,7 @@ fn deserializes_newtype_struct_error() {
             deserializer.deserialize_newtype_struct("A", Visitor)
         }
     }
-    deserializes_with_error::<A>("\n 42", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n 42", "oops", 2, 2);
 }
 
 #[test]
@@ -539,7 +532,7 @@ fn deserializes_seq_error() {
             deserializer.deserialize_seq(Visitor)
         }
     }
-    deserializes_with_error::<A>("\n [ true ]", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n [ true ]", "oops", 2, 2);
 }
 
 #[test]
@@ -584,17 +577,15 @@ fn deserializes_tuple_error() {
             deserializer.deserialize_tuple(2, Visitor)
         }
     }
-    deserializes_with_error::<A>("\n [1, 2]", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n [1, 2]", "oops", 2, 2);
 
     #[derive(Deserialize, Debug, PartialEq)]
     struct B(i32, f64);
     deserializes_with_error::<B>(
         "\n [1]",
-        make_error(
-            "invalid length 1, expected tuple struct B with 2 elements",
-            2,
-            2,
-        ),
+        "invalid length 1, expected tuple struct B with 2 elements",
+        2,
+        2,
     );
 }
 
@@ -668,7 +659,7 @@ fn deserializes_map_error() {
         }
     }
 
-    deserializes_with_error::<A>("\n { 'a': true }", make_error("oops", 2, 2));
+    deserializes_with_error::<A>("\n { 'a': true }", "oops", 2, 2);
 }
 
 #[test]
@@ -691,7 +682,7 @@ fn deserializes_struct_error() {
         b: i32,
         c: i32,
     }
-    deserializes_with_error::<S>("\n { a: 1, 'b': 2 }", make_error("missing field `c`", 2, 2));
+    deserializes_with_error::<S>("\n { a: 1, 'b': 2 }", "missing field `c`", 2, 2);
 }
 
 #[test]
@@ -727,12 +718,9 @@ fn deserializes_enum_error() {
         e: E,
     }
 
-    deserializes_with_error::<S>("{ e: 'A' }", make_error("expected an object", 1, 6));
-    deserializes_with_error::<S>("{ e: 'B' }", make_error("expected an array", 1, 6));
-    deserializes_with_error::<E>(
-        "\n 'C'",
-        make_error("unknown variant `C`, expected `A` or `B`", 2, 2),
-    );
+    deserializes_with_error::<S>("{ e: 'A' }", "expected an object", 1, 6);
+    deserializes_with_error::<S>("{ e: 'B' }", "expected an array", 1, 6);
+    deserializes_with_error::<E>("\n 'C'", "unknown variant `C`, expected `A` or `B`", 2, 2);
 }
 
 #[test]
@@ -771,10 +759,12 @@ fn deserializes_parse_error() {
   = expected identifier or string"#;
     #[derive(Deserialize, PartialEq, Debug)]
     struct A;
-    deserializes_with_error::<A>("{", make_error(parse_err_str, 1, 2));
+    deserializes_with_error::<A>("{", parse_err_str, 1, 2);
 
     deserializes_with_error::<bool>(
         "\n 42",
-        make_error("invalid type: integer `42`, expected a boolean", 2, 2),
+        "invalid type: integer `42`, expected a boolean",
+        2,
+        2,
     );
 }
