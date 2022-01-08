@@ -72,8 +72,12 @@ fn main() {
     eprintln!("Successfully loaded all benchmark JSON files");
 
     for (bench_name, json) in benches {
-        c.bench_function(bench_name, |b| {
+        let value = json5::from_str::<serde_json::Value>(&json).expect("JSON benchmark data invalid");
+        c.bench_function(&format!("deserialize_{}", bench_name), |b| {
             b.iter_with_large_drop(|| json5::from_str::<serde_json::Value>(&json).unwrap())
+        });
+        c.bench_function(&format!("serialize_{}", bench_name), |b| {
+            b.iter(|| json5::to_string(&value).unwrap())
         });
     }
 }
