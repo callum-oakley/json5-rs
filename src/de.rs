@@ -31,7 +31,10 @@ impl<'de> Deserializer<'de> {
     /// Creates a JSON5 deserializer from a `&str`. This parses the input at construction time, so
     /// can fail if the input is not valid JSON5.
     pub fn from_str(input: &'de str) -> Result<Self> {
-        let pair = Parser::parse(Rule::text, input)?.next().unwrap();
+        let pair = Parser::parse(Rule::text, input)
+            .map_err(Error::from_pest)?
+            .next()
+            .unwrap();
         Ok(Deserializer::from_pair(pair))
     }
 
