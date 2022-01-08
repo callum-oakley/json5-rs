@@ -148,7 +148,7 @@ fn serializes_newtype_struct() {
     struct B(f64);
 
     serializes_to(A(42), "42");
-    serializes_to(B(42.), "42");
+    serializes_to(B(42.), "42.0");
 }
 
 #[test]
@@ -168,7 +168,7 @@ fn serializes_seq() {
             Val::Bool(true),
             Val::String("hello".to_owned()),
         ],
-        "[42,true,\"hello\"]",
+        "[42.0,true,\"hello\"]",
     )
 }
 
@@ -185,8 +185,8 @@ fn serializes_tuple_struct() {
     #[derive(Serialize, PartialEq, Debug)]
     struct B(f64, i32);
 
-    serializes_to(A(1, 2.), "[1,2]");
-    serializes_to(B(1., 2), "[1,2]");
+    serializes_to(A(1, 2.), "[1,2.0]");
+    serializes_to(B(1., 2), "[1.0,2]");
 }
 
 #[test]
