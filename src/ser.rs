@@ -1,5 +1,8 @@
 use serde::ser::{self, Serialize};
-use std::{f32, f64};
+use std::{
+    f32, f64,
+    fmt::{self, Write},
+};
 
 use crate::error::{Error, Result};
 
@@ -120,7 +123,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     fn serialize_str(self, v: &str) -> Result<()> {
         self.output.push(b'"');
-        escape(v, &mut self.output);
+        let _ = Escaper(&mut self.output).write_str(v);
         self.output.push(b'"');
         Ok(())
     }
@@ -233,6 +236,12 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         variant.serialize(&mut *self)?;
         self.output.extend_from_slice(b":{");
         Ok(self)
+    }
+
+    fn collect_str<T: ?Sized + std::fmt::Display>(self, value: &T) -> Result<()> {
+        // Panic here becuase that's what std's `.to_string()` does
+        write!(Escaper(&mut self.output), "{}", value).expect("Display implementation failed");
+        Ok(())
     }
 }
 
@@ -367,18 +376,22 @@ impl<'a> ser::SerializeStructVariant for &'a mut Serializer {
     }
 }
 
-fn escape(v: &str, buffer: &mut Vec<u8>) {
-    for byte in v.bytes() {
-        match byte {
-            b'"' => buffer.extend_from_slice(b"\\\""),
-            b'\n' => buffer.extend_from_slice(b"\\n"),
-            b'\r' => buffer.extend_from_slice(b"\\r"),
-            b'\t' => buffer.extend_from_slice(b"\\t"),
-            b'/' => buffer.extend_from_slice(b"\\/"),
-            b'\\' => buffer.extend_from_slice(b"\\\\"),
-            0x08 => buffer.extend_from_slice(b"\\b"),
-            0x0C => buffer.extend_from_slice(b"\\f"),
-            byte => buffer.push(byte),
+struct Escaper<'a>(&'a mut Vec<u8>);
+impl Write for Escaper<'_> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for byte in s.bytes() {
+            match byte {
+                b'"' => self.0.extend_from_slice(b"\\\""),
+                b'\n' => self.0.extend_from_slice(b"\\n"),
+                b'\r' => self.0.extend_from_slice(b"\\r"),
+                b'\t' => self.0.extend_from_slice(b"\\t"),
+                b'/' => self.0.extend_from_slice(b"\\/"),
+                b'\\' => self.0.extend_from_slice(b"\\\\"),
+                0x08 => self.0.extend_from_slice(b"\\b"),
+                0x0C => self.0.extend_from_slice(b"\\f"),
+                byte => self.0.push(byte),
+            }
         }
+        Ok(())
     }
 }
