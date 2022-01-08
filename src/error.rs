@@ -16,13 +16,6 @@ pub struct Location {
     pub column: usize,
 }
 
-impl From<&Span<'_>> for Location {
-    fn from(s: &Span<'_>) -> Self {
-        let (line, column) = s.start_pos().line_col();
-        Self { line, column }
-    }
-}
-
 /// A bare bones error type which currently just collapses all the underlying errors in to a single
 /// string... This is fine for displaying to the user, but not very useful otherwise. Work to be
 /// done here.
@@ -37,8 +30,8 @@ pub enum Error {
     },
 }
 
-impl From<pest::error::Error<Rule>> for Error {
-    fn from(err: pest::error::Error<Rule>) -> Self {
+impl Error {
+    pub(crate) fn from_pest(err: pest::error::Error<Rule>) -> Self {
         let (line, column) = match err.line_col {
             pest::error::LineColLocation::Pos((l, c)) => (l, c),
             pest::error::LineColLocation::Span((l, c), (_, _)) => (l, c),
@@ -79,7 +72,7 @@ impl Display for Error {
 impl std::error::Error for Error {}
 
 /// Adds location information from `span`, if `res` is an error.
-pub fn set_location<T>(res: &mut Result<T>, span: &Span<'_>) {
+pub(crate) fn set_location<T>(res: &mut Result<T>, span: &Span<'_>) {
     if let Err(ref mut e) = res {
         let Error::Message { location, .. } = e;
         if location.is_none() {
