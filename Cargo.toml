@@ -10,6 +10,7 @@ keywords = ["json5", "parse", "parser", "serde", "json"]
 edition = "2018"
 
 [dependencies]
+itoa = "1.0.1"
 pest = "2.0"
 pest_derive = "2.0"
 serde = "1.0"

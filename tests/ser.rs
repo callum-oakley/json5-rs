@@ -201,6 +201,23 @@ fn serializes_map() {
 }
 
 #[test]
+fn serializes_map_integer_keys() {
+    let mut map = HashMap::new();
+    map.insert(5, ());
+    serializes_to(map, "{\"5\":null}");
+}
+
+#[test]
+fn non_string_keys() {
+    let mut map = HashMap::new();
+    map.insert((), true);
+    assert_eq!(
+        json5::to_string(&map).unwrap_err().to_string(),
+        "key must be a string"
+    );
+}
+
+#[test]
 fn serializes_struct() {
     #[derive(Serialize, PartialEq, Debug)]
     struct S {
