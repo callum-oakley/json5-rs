@@ -8,21 +8,20 @@ pub fn to_string<T>(value: &T) -> Result<String>
 where
     T: Serialize,
 {
-    let mut serializer = Serializer {
-        output: String::new(),
-    };
+    let mut serializer = Serializer { output: Vec::new() };
     value.serialize(&mut serializer)?;
-    Ok(serializer.output)
+    Ok(String::from_utf8(serializer.output).expect("serialization emitted invalid UTF-8"))
 }
 
 struct Serializer {
-    output: String,
+    output: Vec<u8>,
     // TODO settings for formatting (single vs double quotes, whitespace etc)
 }
 
 impl Serializer {
     fn serialize_integer<I: itoa::Integer>(&mut self, v: I) -> Result<()> {
-        self.output.push_str(itoa::Buffer::new().format(v));
+        self.output
+            .extend_from_slice(itoa::Buffer::new().format(v).as_bytes());
         Ok(())
     }
 }
@@ -40,7 +39,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeStructVariant = Self;
 
     fn serialize_bool(self, v: bool) -> Result<()> {
-        self.output.push_str(if v { "true" } else { "false" });
+        self.output
+            .extend_from_slice(if v { b"true" } else { b"false" });
         Ok(())
     }
 
@@ -78,26 +78,28 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     fn serialize_f32(self, v: f32) -> Result<()> {
         if v == f32::INFINITY {
-            self.output += "Infinity";
+            self.output.extend_from_slice(b"Infinity");
         } else if v == f32::NEG_INFINITY {
-            self.output += "-Infinity";
+            self.output.extend_from_slice(b"-Infinity");
         } else if v.is_nan() {
-            self.output += "NaN";
+            self.output.extend_from_slice(b"NaN");
         } else {
-            self.output.push_str(ryu::Buffer::new().format_finite(v));
+            self.output
+                .extend_from_slice(ryu::Buffer::new().format_finite(v).as_bytes());
         }
         Ok(())
     }
 
     fn serialize_f64(self, v: f64) -> Result<()> {
         if v == f64::INFINITY {
-            self.output += "Infinity";
+            self.output.extend_from_slice(b"Infinity");
         } else if v == f64::NEG_INFINITY {
-            self.output += "-Infinity";
+            self.output.extend_from_slice(b"-Infinity");
         } else if v.is_nan() {
-            self.output += "NaN";
+            self.output.extend_from_slice(b"NaN");
         } else {
-            self.output.push_str(ryu::Buffer::new().format_finite(v));
+            self.output
+                .extend_from_slice(ryu::Buffer::new().format_finite(v).as_bytes());
         }
         Ok(())
     }
@@ -107,9 +109,9 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_str(self, v: &str) -> Result<()> {
-        self.output += "\"";
+        self.output.push(b'"');
         escape(v, &mut self.output);
-        self.output += "\"";
+        self.output.push(b'"');
         Ok(())
     }
 
@@ -129,7 +131,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_unit(self) -> Result<()> {
-        self.output += "null";
+        self.output.extend_from_slice(b"null");
         Ok(())
     }
 
@@ -163,16 +165,16 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     where
         T: ?Sized + Serialize,
     {
-        self.output += "{";
+        self.output.push(b'{');
         variant.serialize(&mut *self)?; // TODO drop the quotes where possible
-        self.output += ":";
+        self.output.push(b':');
         value.serialize(&mut *self)?;
-        self.output += "}";
+        self.output.push(b'}');
         Ok(())
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        self.output += "[";
+        self.output.push(b'[');
         Ok(self)
     }
 
@@ -195,14 +197,14 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
-        self.output += "{";
+        self.output.push(b'{');
         variant.serialize(&mut *self)?;
-        self.output += ":[";
+        self.output.extend_from_slice(b":[");
         Ok(self)
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        self.output += "{";
+        self.output.push(b'{');
         Ok(self)
     }
 
@@ -217,9 +219,9 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        self.output += "{";
+        self.output.push(b'{');
         variant.serialize(&mut *self)?;
-        self.output += ":{";
+        self.output.extend_from_slice(b":{");
         Ok(self)
     }
 }
@@ -232,14 +234,14 @@ impl<'a> ser::SerializeSeq for &'a mut Serializer {
     where
         T: ?Sized + Serialize,
     {
-        if !self.output.ends_with('[') {
-            self.output += ",";
+        if self.output.last() != Some(&b'[') {
+            self.output.push(b',');
         }
         value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<()> {
-        self.output += "]";
+        self.output.push(b']');
         Ok(())
     }
 }
@@ -288,7 +290,7 @@ impl<'a> ser::SerializeTupleVariant for &'a mut Serializer {
     }
 
     fn end(self) -> Result<()> {
-        self.output += "]}";
+        self.output.extend_from_slice(b"]}");
         Ok(())
     }
 }
@@ -301,8 +303,8 @@ impl<'a> ser::SerializeMap for &'a mut Serializer {
     where
         T: ?Sized + Serialize,
     {
-        if !self.output.ends_with('{') {
-            self.output += ",";
+        if self.output.last() != Some(&b'{') {
+            self.output.push(b',');
         }
         key.serialize(&mut **self)
     }
@@ -311,12 +313,12 @@ impl<'a> ser::SerializeMap for &'a mut Serializer {
     where
         T: ?Sized + Serialize,
     {
-        self.output += ":";
+        self.output.push(b':');
         value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<()> {
-        self.output += "}";
+        self.output.push(b'}');
         Ok(())
     }
 }
@@ -350,23 +352,23 @@ impl<'a> ser::SerializeStructVariant for &'a mut Serializer {
     }
 
     fn end(self) -> Result<()> {
-        self.output += "}}";
+        self.output.extend_from_slice(b"}}");
         Ok(())
     }
 }
 
-fn escape(v: &str, buffer: &mut String) {
-    for c in v.chars() {
-        match c {
-            '"' => buffer.push_str("\\\""),
-            '\n' => buffer.push_str("\\n"),
-            '\r' => buffer.push_str("\\r"),
-            '\t' => buffer.push_str("\\t"),
-            '/' => buffer.push_str("\\/"),
-            '\\' => buffer.push_str("\\\\"),
-            '\u{0008}' => buffer.push_str("\\b"),
-            '\u{000c}' => buffer.push_str("\\f"),
-            c => buffer.push(c),
+fn escape(v: &str, buffer: &mut Vec<u8>) {
+    for byte in v.bytes() {
+        match byte {
+            b'"' => buffer.extend_from_slice(b"\\\""),
+            b'\n' => buffer.extend_from_slice(b"\\n"),
+            b'\r' => buffer.extend_from_slice(b"\\r"),
+            b'\t' => buffer.extend_from_slice(b"\\t"),
+            b'/' => buffer.extend_from_slice(b"\\/"),
+            b'\\' => buffer.extend_from_slice(b"\\\\"),
+            0x08 => buffer.extend_from_slice(b"\\b"),
+            0x0C => buffer.extend_from_slice(b"\\f"),
+            byte => buffer.push(byte),
         }
     }
 }
