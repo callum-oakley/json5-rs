@@ -8,7 +8,9 @@ pub fn to_string<T>(value: &T) -> Result<String>
 where
     T: Serialize,
 {
-    let mut serializer = Serializer { output: Vec::new() };
+    let mut serializer = Serializer {
+        output: Vec::with_capacity(128),
+    };
     value.serialize(&mut serializer)?;
     Ok(String::from_utf8(serializer.output).expect("serialization emitted invalid UTF-8"))
 }
