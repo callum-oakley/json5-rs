@@ -25,12 +25,12 @@ where
 }
 
 #[allow(unused)]
-pub fn deserializes_to_nan_f32<'a>(s: &'a str) {
+pub fn deserializes_to_nan_f32(s: &str) {
     assert_matches!(json5::from_str::<f32>(s), Ok(value) if value.is_nan());
 }
 
 #[allow(unused)]
-pub fn deserializes_to_nan_f64<'a>(s: &'a str) {
+pub fn deserializes_to_nan_f64(s: &str) {
     assert_matches!(json5::from_str::<f64>(s), Ok(value) if value.is_nan());
 }
 

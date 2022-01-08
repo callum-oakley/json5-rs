@@ -23,6 +23,7 @@ where
     T::deserialize(&mut deserializer)
 }
 
+/// A deserializer from JSON5 into Rust values.
 pub struct Deserializer<'de> {
     pair: Option<Pair<'de, Rule>>,
 }
@@ -30,6 +31,7 @@ pub struct Deserializer<'de> {
 impl<'de> Deserializer<'de> {
     /// Creates a JSON5 deserializer from a `&str`. This parses the input at construction time, so
     /// can fail if the input is not valid JSON5.
+    #[allow(clippy::should_implement_trait)] // This is not the same as `FromStr::from_str`
     pub fn from_str(input: &'de str) -> Result<Self> {
         let pair = Parser::parse(Rule::text, input)?.next().unwrap();
         Ok(Deserializer::from_pair(pair))
@@ -79,7 +81,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         let pair = self.pair.take().unwrap();
         let span = pair.as_span();
-        let mut res = (move || visitor.visit_enum(Enum { pair }))();
+        let mut res = visitor.visit_enum(Enum { pair });
         error::set_location(&mut res, &span);
         res
     }
@@ -224,10 +226,10 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         let pair = self.pair.take().unwrap();
         let span = pair.as_span();
-        let mut res = (move || match pair.as_rule() {
+        let mut res = match pair.as_rule() {
             Rule::null => visitor.visit_none(),
             _ => visitor.visit_some(&mut Deserializer::from_pair(pair)),
-        })();
+        };
         error::set_location(&mut res, &span);
         res
     }
@@ -237,7 +239,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: de::Visitor<'de>,
     {
         let span = self.pair.as_ref().unwrap().as_span();
-        let mut res = (move || visitor.visit_newtype_struct(self))();
+        let mut res = visitor.visit_newtype_struct(self);
         error::set_location(&mut res, &span);
         res
     }
@@ -264,7 +266,7 @@ fn parse_string_component(pair: Pair<'_, Rule>) -> Result<String> {
         match component.as_rule() {
             Rule::char_literal => result.push_str(component.as_str()),
             Rule::char_escape_sequence => result.push_str(parse_char_escape_sequence(&component)),
-            Rule::nul_escape_sequence => result.push_str("\u{0000}"),
+            Rule::nul_escape_sequence => result.push('\u{0000}'),
             Rule::hex_escape_sequence => {
                 let hex_escape = parse_hex(component.as_str())?;
                 match char::from_u32(hex_escape) {
@@ -298,7 +300,7 @@ fn parse_string_component(pair: Pair<'_, Rule>) -> Result<String> {
                         };
 
                         // Join together
-                        let rc = ((rc1 - 0xD800) << 10) | (rc2 - 0xDC00) + 0x1_0000;
+                        let rc = ((rc1 - 0xD800) << 10) | (rc2 - 0xDC00 + 0x1_0000);
                         match char::from_u32(rc) {
                             Some(c) => {
                                 result.push(c);
@@ -371,7 +373,7 @@ fn parse_integer(pair: &Pair<'_, Rule>) -> Result<i64> {
         s if is_hex_literal(s) => Ok(parse_hex(&s[2..])? as i64),
         s => s
             .parse()
-            .or_else(|_| Err(de::Error::custom("error parsing integer"))),
+            .map_err(|_| de::Error::custom("error parsing integer")),
     }
 }
 
@@ -383,7 +385,7 @@ fn is_int(s: &str) -> bool {
 }
 
 fn parse_hex(s: &str) -> Result<u32> {
-    u32::from_str_radix(s, 16).or_else(|_| Err(de::Error::custom("error parsing hex")))
+    u32::from_str_radix(s, 16).map_err(|_| de::Error::custom("error parsing hex"))
 }
 
 fn is_hex_literal(s: &str) -> bool {

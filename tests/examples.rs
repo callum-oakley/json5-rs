@@ -104,7 +104,7 @@ fn deserializes_example_nan() {
 
     match json5::from_str::<NanF64>(&contents) {
         Ok(value) => assert!(value.nan.is_nan() && value.neg_nan.is_nan()),
-        Err(err) => panic!(format!("{}", err)),
+        Err(err) => panic!("{}", err),
     }
 
     #[derive(Deserialize, PartialEq, Debug)]
@@ -115,7 +115,7 @@ fn deserializes_example_nan() {
 
     match json5::from_str::<NanF32>(&contents) {
         Ok(value) => assert!(value.nan.is_nan() && value.neg_nan.is_nan()),
-        Err(err) => panic!(format!("{}", err)),
+        Err(err) => panic!("{}", err),
     }
 
     let mut map = HashMap::new();
@@ -136,7 +136,7 @@ fn deserializes_example_nan() {
             }
             _ => panic!("not NaN"),
         },
-        Err(err) => panic!(format!("{}", err)),
+        Err(err) => panic!("{}", err),
     }
 
     deserializes_to::<Value>(
