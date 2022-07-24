@@ -763,15 +763,9 @@ fn deserializes_json_values() {
 
 #[test]
 fn deserializes_parse_error() {
-    let parse_err_str = r#" --> 1:2
-  |
-1 | {
-  |  ^---
-  |
-  = expected identifier or string"#;
     #[derive(Deserialize, PartialEq, Debug)]
     struct A;
-    deserializes_with_error::<A>("{", make_error(parse_err_str, 1, 2));
+    deserializes_with_error::<A>("{", make_error("expected identifier or string", 1, 2));
 
     deserializes_with_error::<bool>(
         "\n 42",

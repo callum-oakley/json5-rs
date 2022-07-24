@@ -43,8 +43,26 @@ impl From<pest::error::Error<Rule>> for Error {
             pest::error::LineColLocation::Pos((l, c)) => (l, c),
             pest::error::LineColLocation::Span((l, c), (_, _)) => (l, c),
         };
+
+        let msg = match err.variant {
+            pest::error::ErrorVariant::ParsingError {
+                positives,
+                negatives,
+            } => match (negatives.is_empty(), positives.is_empty()) {
+                (false, false) => format!(
+                    "unexpected {}; expected {}",
+                    Enumerated(&negatives),
+                    Enumerated(&positives),
+                ),
+                (false, true) => format!("unexpected {}", Enumerated(&negatives)),
+                (true, false) => format!("expected {}", Enumerated(&positives)),
+                (true, true) => "unknown parsing error".to_owned(),
+            },
+            pest::error::ErrorVariant::CustomError { message } => message,
+        };
+
         Error::Message {
-            msg: err.to_string(),
+            msg,
             location: Some(Location { line, column }),
         }
     }
@@ -85,6 +103,26 @@ pub fn set_location<T>(res: &mut Result<T>, span: &Span<'_>) {
         if location.is_none() {
             let (line, column) = span.start_pos().line_col();
             *location = Some(Location { line, column });
+        }
+    }
+}
+
+struct Enumerated<'a, R: pest::RuleType>(&'a [R]);
+
+impl<R: pest::RuleType> Display for Enumerated<'_, R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            [] => Ok(()),
+            [rule] => write!(f, "{:?}", rule),
+            [first, second] => write!(f, "{:?} or {:?}", first, second),
+            rules => {
+                let mut iter = rules.iter();
+                let last = iter.next_back().expect("last");
+                for rule in iter {
+                    write!(f, "{:?}, ", rule)?;
+                }
+                write!(f, "or {:?}", last)
+            }
         }
     }
 }
