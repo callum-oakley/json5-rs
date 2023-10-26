@@ -43,7 +43,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeStructVariant = Self;
 
     fn serialize_bool(self, v: bool) -> Result<()> {
-        self.call_to_string(&v)
+        self.output += if v { "true" } else { "false" };
+        Ok(())
     }
 
     fn serialize_i8(self, v: i8) -> Result<()> {
