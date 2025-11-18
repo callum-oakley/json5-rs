@@ -8,3 +8,6 @@ repository = "https://github.com/callum-oakley/json5-rs"
 readme = "README.md"
 keywords = ["json5", "parse", "parser", "serde", "json"]
 edition = "2024"
+
+[dependencies]
+serde = "1"
