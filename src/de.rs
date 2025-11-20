@@ -80,14 +80,96 @@ impl<'de> Deserializer<'de> {
     // https://spec.json5.org/#strings
     fn parse_string(&mut self) -> Result<StringResult<'de>> {
         let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
-        if !matches!(c, '"' | '\'') {
-            return Err(self.err_at(offset, ErrorCode::ExpectedString));
+        if c == '"' || c == '\'' {
+            self.parse_string_characters(c)
+        } else {
+            Err(self.err_at(offset, ErrorCode::ExpectedString))
         }
-        self.parse_string_characters(c)
     }
 
     // https://spec.json5.org/#numbers
     fn parse_number(&mut self) -> Result<f64> {
+        let (_, c) = self.peek_or(ErrorCode::EofParsingNumber)?;
+        match c {
+            '+' => {
+                self.next();
+                self.parse_unsigned_number()
+            }
+            '-' => {
+                self.next();
+                self.parse_unsigned_number().map(|n| -n)
+            }
+            _ => self.parse_unsigned_number(),
+        }
+    }
+
+    fn parse_unsigned_number(&mut self) -> Result<f64> {
+        let (offset, c) = self.peek_or(ErrorCode::EofParsingNumber)?;
+        match c {
+            'I' => {
+                self.expect_str(
+                    "Infinity",
+                    &ErrorCode::EofParsingNumber,
+                    ErrorCode::ExpectedNumber,
+                )?;
+                Ok(f64::INFINITY)
+            }
+            'N' => {
+                self.expect_str(
+                    "NaN",
+                    &ErrorCode::EofParsingNumber,
+                    ErrorCode::ExpectedNumber,
+                )?;
+                Ok(f64::NAN)
+            }
+            '0' => {
+                self.next();
+                match self.peek() {
+                    Some((_, 'x' | 'X')) => {
+                        self.next();
+                        self.parse_hex_number()
+                    }
+                    Some((_, '.' | 'e' | 'E')) => Ok(self.parse_decimal_number()),
+                    Some((offset, _)) => Err(self.err_at(offset, ErrorCode::ExpectedNumber)),
+                    None => Ok(0f64),
+                }
+            }
+            '.' | '1'..='9' => Ok(self.parse_decimal_number()),
+            _ => Err(self.err_at(offset, ErrorCode::ExpectedNumber)),
+        }
+    }
+
+    // TODO research parsing floating point. I'm not confident this is correct. powf scares me
+    fn parse_decimal_number(&mut self) -> f64 {
+        let (mut n, _) = self.parse_decimal_number_part();
+        if self.peek().is_some_and(|(_, c)| c == '.') {
+            self.next();
+            let (fractional_part, len) = self.parse_decimal_number_part();
+            n += fractional_part * 10f64.powf(-len);
+        }
+        if self.peek().is_some_and(|(_, c)| c == 'e' || c == 'E') {
+            // TODO exponential part can be signed!
+            self.next();
+            let (exponential_part, _) = self.parse_decimal_number_part();
+            n *= 10f64.powf(exponential_part);
+        }
+        n
+    }
+
+    fn parse_decimal_number_part(&mut self) -> (f64, f64) {
+        let mut n = 0f64;
+        let mut len = 0f64;
+        while let Some((_, c)) = self.peek()
+            && c.is_ascii_digit()
+        {
+            self.next();
+            n = n * 10f64 + f64::from(c.to_digit(10).expect("c is an ascii digit"));
+            len += 1f64;
+        }
+        (n, len)
+    }
+
+    fn parse_hex_number(&mut self) -> Result<f64> {
         todo!()
     }
 
@@ -103,7 +185,7 @@ impl<'de> Deserializer<'de> {
                     return Ok(StringResult::Owned(owned));
                 }
                 return Ok(StringResult::Borrowed(&self.input[start..offset]));
-            } else if matches!(c, '\u{000A}' | '\u{000D}') {
+            } else if c == '\u{000A}' || c == '\u{000D}' {
                 // LineTerminator is forbidden except U+2028 and U+2029 are explicitly allowed.
                 return Err(self.err_at(offset, ErrorCode::LineTerminatorInString));
             } else if c == '\\' {
@@ -199,63 +281,63 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        self.deserialize_i64(visitor)
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        self.deserialize_i64(visitor)
     }
 
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        self.deserialize_i64(visitor)
     }
 
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        visitor.visit_i64(self.parse_number()? as i64)
     }
 
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        self.deserialize_u64(visitor)
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        self.deserialize_u64(visitor)
     }
 
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        self.deserialize_u64(visitor)
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        visitor.visit_u64(self.parse_number()? as u64)
     }
 
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f64(self.parse_number()?)
+        self.deserialize_f64(visitor)
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>

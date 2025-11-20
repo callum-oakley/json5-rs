@@ -14,11 +14,13 @@ pub enum ErrorCode {
 
     EofParsingBool,
     EofParsingNull,
+    EofParsingNumber,
     EofParsingString,
     EofParsingValue,
 
     ExpectedBool,
     ExpectedNull,
+    ExpectedNumber,
     ExpectedString,
 
     InvalidEscapeSequence,
@@ -33,11 +35,13 @@ impl Display for ErrorCode {
 
             ErrorCode::EofParsingBool => write!(f, "EOF parsing bool"),
             ErrorCode::EofParsingNull => write!(f, "EOF parsing null"),
+            ErrorCode::EofParsingNumber => write!(f, "EOF parsing number"),
             ErrorCode::EofParsingString => write!(f, "EOF parsing string"),
             ErrorCode::EofParsingValue => write!(f, "EOF parsing value"),
 
             ErrorCode::ExpectedBool => write!(f, "expected bool"),
             ErrorCode::ExpectedNull => write!(f, "expected null"),
+            ErrorCode::ExpectedNumber => write!(f, "expected number"),
             ErrorCode::ExpectedString => write!(f, "expected string"),
 
             ErrorCode::InvalidEscapeSequence => write!(f, "invalid escape sequence"),

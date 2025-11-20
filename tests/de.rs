@@ -63,11 +63,22 @@ fn parse_string() {
         Err(err_at(0, 5, InvalidEscapeSequence))
     );
     assert_eq!(
+        from_str::<String>("false"),
+        Err(err_at(0, 0, ExpectedString))
+    );
+    assert_eq!(from_str::<String>("'..."), Err(err(EofParsingString)));
+    assert_eq!(
         from_str::<&str>(r#""two\nlines""#),
         Err(err(Message(
             r#"invalid type: string "two\nlines", expected a borrowed string"#.to_owned(),
         ))),
     );
+}
+
+// https://spec.json5.org/#numbers
+#[test]
+fn parse_number() {
+    assert_eq!(from_str("42"), Ok(42));
 }
 
 #[test]
