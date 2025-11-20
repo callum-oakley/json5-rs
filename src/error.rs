@@ -1,4 +1,7 @@
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    num::ParseFloatError,
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -24,6 +27,7 @@ pub enum ErrorCode {
     ExpectedString,
 
     InvalidEscapeSequence,
+    LeadingZero,
     LineTerminatorInString,
     TrailingCharacters,
 }
@@ -45,6 +49,7 @@ impl Display for ErrorCode {
             ErrorCode::ExpectedString => write!(f, "expected string"),
 
             ErrorCode::InvalidEscapeSequence => write!(f, "invalid escape sequence"),
+            ErrorCode::LeadingZero => write!(f, "leading zero"),
             ErrorCode::LineTerminatorInString => write!(f, "line terminator in string"),
             ErrorCode::TrailingCharacters => write!(f, "trailing characters"),
         }

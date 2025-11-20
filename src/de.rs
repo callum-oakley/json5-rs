@@ -1,4 +1,4 @@
-use std::{iter::Peekable, str::CharIndices};
+use std::{iter::Peekable, num::ParseFloatError, str::CharIndices};
 
 use serde::{Deserialize, de::Visitor};
 
@@ -89,87 +89,67 @@ impl<'de> Deserializer<'de> {
 
     // https://spec.json5.org/#numbers
     fn parse_number(&mut self) -> Result<f64> {
-        let (_, c) = self.peek_or(ErrorCode::EofParsingNumber)?;
-        match c {
-            '+' => {
-                self.next();
-                self.parse_unsigned_number()
-            }
-            '-' => {
-                self.next();
-                self.parse_unsigned_number().map(|n| -n)
-            }
-            _ => self.parse_unsigned_number(),
-        }
-    }
+        let (start, _) = self.peek_or(ErrorCode::EofParsingNumber)?;
 
-    fn parse_unsigned_number(&mut self) -> Result<f64> {
-        let (offset, c) = self.peek_or(ErrorCode::EofParsingNumber)?;
-        match c {
-            'I' => {
-                self.expect_str(
-                    "Infinity",
-                    &ErrorCode::EofParsingNumber,
-                    ErrorCode::ExpectedNumber,
-                )?;
-                Ok(f64::INFINITY)
-            }
-            'N' => {
-                self.expect_str(
-                    "NaN",
-                    &ErrorCode::EofParsingNumber,
-                    ErrorCode::ExpectedNumber,
-                )?;
-                Ok(f64::NAN)
-            }
-            '0' => {
+        let sign = match self.peek_or(ErrorCode::EofParsingNumber)? {
+            (_, '+') => {
                 self.next();
-                match self.peek() {
-                    Some((_, 'x' | 'X')) => {
-                        self.next();
-                        self.parse_hex_number()
-                    }
-                    Some((_, '.' | 'e' | 'E')) => Ok(self.parse_decimal_number()),
-                    Some((offset, _)) => Err(self.err_at(offset, ErrorCode::ExpectedNumber)),
-                    None => Ok(0f64),
+                1f64
+            }
+            (_, '-') => {
+                self.next();
+                -1f64
+            }
+            _ => 1f64,
+        };
+
+        match self.next_or(ErrorCode::EofParsingNumber)? {
+            (_, 'I') => {
+                self.expect_str(
+                    "nfinity",
+                    &ErrorCode::EofParsingNumber,
+                    ErrorCode::ExpectedNumber,
+                )?;
+                Ok(sign * f64::INFINITY)
+            }
+            (_, 'N') => {
+                self.expect_str(
+                    "aN",
+                    &ErrorCode::EofParsingNumber,
+                    ErrorCode::ExpectedNumber,
+                )?;
+                Ok(sign * f64::NAN)
+            }
+            (_, '0') => match self.peek() {
+                Some((_, 'x' | 'X')) => {
+                    self.next();
+                    Ok(sign * self.parse_unsigned_hex_number()?)
                 }
-            }
-            '.' | '1'..='9' => Ok(self.parse_decimal_number()),
-            _ => Err(self.err_at(offset, ErrorCode::ExpectedNumber)),
+                Some((offset, '.' | 'e' | 'E')) => self.parse_decimal_number(start, offset),
+                Some((_, '0'..='9')) => Err(self.err_at(start, ErrorCode::LeadingZero)),
+                _ => Ok(sign * 0f64),
+            },
+            (offset, '.' | '1'..='9') => self.parse_decimal_number(start, offset),
+            (offset, _) => Err(self.err_at(offset, ErrorCode::ExpectedNumber)),
         }
     }
 
-    // TODO research parsing floating point. I'm not confident this is correct. powf scares me
-    fn parse_decimal_number(&mut self) -> f64 {
-        let (mut n, _) = self.parse_decimal_number_part();
-        if self.peek().is_some_and(|(_, c)| c == '.') {
-            self.next();
-            let (fractional_part, len) = self.parse_decimal_number_part();
-            n += fractional_part * 10f64.powf(-len);
-        }
-        if self.peek().is_some_and(|(_, c)| c == 'e' || c == 'E') {
-            // TODO exponential part can be signed!
-            self.next();
-            let (exponential_part, _) = self.parse_decimal_number_part();
-            n *= 10f64.powf(exponential_part);
-        }
-        n
-    }
-
-    fn parse_decimal_number_part(&mut self) -> (f64, f64) {
-        let mut n = 0f64;
-        let mut len = 0f64;
-        while let Some((_, c)) = self.peek()
-            && c.is_ascii_digit()
+    // Aside from the representation of Infinity, NaN, and hex numbers, which are handled in
+    // parse_number, f64's from_str uses exactly the same format as JSON5.
+    // https://doc.rust-lang.org/std/primitive.f64.html#method.from_str
+    fn parse_decimal_number(&mut self, start: usize, mut offset: usize) -> Result<f64> {
+        while let Some((o, c)) = self.peek()
+            && matches!(c, '+' | '-' | '.' | 'e' | 'E' | '0'..='9')
         {
             self.next();
-            n = n * 10f64 + f64::from(c.to_digit(10).expect("c is an ascii digit"));
-            len += 1f64;
+            offset = o;
         }
-        (n, len)
+        self.input[start..=offset]
+            .parse()
+            .map_err(|err: ParseFloatError| self.err_at(start, ErrorCode::Message(err.to_string())))
     }
 
-    fn parse_hex_number(&mut self) -> Result<f64> {
+    fn parse_unsigned_hex_number(&mut self) -> Result<f64> {
         todo!()
     }
 

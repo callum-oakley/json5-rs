@@ -78,7 +78,21 @@ fn parse_string() {
 // https://spec.json5.org/#numbers
 #[test]
 fn parse_number() {
-    assert_eq!(from_str("42"), Ok(42));
+    assert_eq!(from_str("0"), Ok(0));
+    assert_eq!(from_str("123"), Ok(123));
+    assert_eq!(from_str("-123"), Ok(-123));
+    assert_eq!(from_str("123.456"), Ok(123.456));
+    assert_eq!(from_str("123.0"), Ok(123.));
+    assert_eq!(from_str("123."), Ok(123.));
+    assert_eq!(from_str(".456"), Ok(0.456));
+    assert_eq!(from_str("0.456"), Ok(0.456));
+    assert_eq!(from_str("123e-456"), Ok(123e-456));
+    assert_eq!(from_str("123E-456"), Ok(123e-456));
+    // TODO inf, nan, hex etc. more error cases
+    assert_eq!(
+        from_str::<u32>("007"),
+        Err(err_at(0, 0, ErrorCode::LeadingZero))
+    );
 }
 
 #[test]
