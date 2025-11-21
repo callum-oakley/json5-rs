@@ -29,6 +29,7 @@ pub enum ErrorCode {
     InvalidEscapeSequence,
     LeadingZero,
     LineTerminatorInString,
+    OverflowParsingNumber,
     TrailingCharacters,
 }
 
@@ -51,6 +52,7 @@ impl Display for ErrorCode {
             ErrorCode::InvalidEscapeSequence => write!(f, "invalid escape sequence"),
             ErrorCode::LeadingZero => write!(f, "leading zero"),
             ErrorCode::LineTerminatorInString => write!(f, "line terminator in string"),
+            ErrorCode::OverflowParsingNumber => write!(f, "overflow parsing number"),
             ErrorCode::TrailingCharacters => write!(f, "trailing characters"),
         }
     }

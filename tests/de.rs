@@ -1,3 +1,5 @@
+use std::f64;
+
 use json5::{Error, ErrorCode, Position, from_str};
 
 use ErrorCode::*;
@@ -39,13 +41,20 @@ fn parse_string() {
     assert_eq!(from_str(r#""'quotes'""#), Ok("'quotes'"));
     assert_eq!(from_str(r#"'你好!'"#), Ok("你好!"));
     assert_eq!(from_str("'\u{2028}\u{2029}'"), Ok("\u{2028}\u{2029}"));
-
+    assert_eq!(from_str(r#"'a'"#), Ok('a'));
+    assert_eq!(from_str(r#"'好'"#), Ok('好'));
     assert_eq!(from_str(r#""two\nlines""#), Ok("two\nlines".to_owned()));
     assert_eq!(from_str("'one \\\nline'"), Ok("one line".to_owned()));
     assert_eq!(from_str("'one \\\r\nline'"), Ok("one line".to_owned()));
     assert_eq!(from_str(r#""zero: '\0'""#), Ok("zero: '\0'".to_owned()));
     assert_eq!(from_str(r#"'\u4f60\u597d\x21'"#), Ok("你好!".to_owned()));
 
+    assert_eq!(
+        from_str::<char>(r#"'ab'"#),
+        Err(err(Message(
+            "invalid value: string \"ab\", expected a character".to_owned()
+        )))
+    );
     assert_eq!(
         from_str::<String>("'one\ntwo'"),
         Err(err_at(0, 4, LineTerminatorInString))
@@ -70,7 +79,7 @@ fn parse_string() {
     assert_eq!(
         from_str::<&str>(r#""two\nlines""#),
         Err(err(Message(
-            r#"invalid type: string "two\nlines", expected a borrowed string"#.to_owned(),
+            "invalid type: string \"two\\nlines\", expected a borrowed string".to_owned(),
         ))),
     );
 }
@@ -79,7 +88,9 @@ fn parse_string() {
 #[test]
 fn parse_number() {
     assert_eq!(from_str("0"), Ok(0));
-    assert_eq!(from_str("123"), Ok(123));
+    assert!(from_str::<f64>("-0.").is_ok_and(|f| f == 0. && f.is_sign_negative()));
+    assert_eq!(from_str("123"), Ok(123i32));
+    assert_eq!(from_str("123"), Ok(123u32));
     assert_eq!(from_str("-123"), Ok(-123));
     assert_eq!(from_str("123.456"), Ok(123.456));
     assert_eq!(from_str("123.0"), Ok(123.));
@@ -88,10 +99,49 @@ fn parse_number() {
     assert_eq!(from_str("0.456"), Ok(0.456));
     assert_eq!(from_str("123e-456"), Ok(123e-456));
     assert_eq!(from_str("123E-456"), Ok(123e-456));
-    // TODO inf, nan, hex etc. more error cases
+    assert_eq!(from_str("18446744073709551615"), Ok(u64::MAX));
+    assert_eq!(from_str("Infinity"), Ok(f64::INFINITY));
+    assert_eq!(from_str("-Infinity"), Ok(-f64::INFINITY));
+    assert!(from_str::<f64>("NaN").is_ok_and(|f| f.is_nan() && f.is_sign_positive()));
+    assert!(from_str::<f64>("-NaN").is_ok_and(|f| f.is_nan() && f.is_sign_negative()));
+    assert_eq!(from_str("0xdecaf"), Ok(0xdecaf));
+    assert_eq!(from_str("-0xC0FFEE"), Ok(-0xC0FFEE));
+    assert_eq!(from_str("0x7FFFFFFFFFFFFFFF"), Ok(i64::MAX));
+    assert_eq!(from_str("-0x8000000000000000"), Ok(i64::MIN));
+    assert_eq!(from_str("0x0"), Ok(0));
+
+    assert_eq!(from_str::<u32>("0x"), Err(err(EofParsingNumber)));
+    assert_eq!(from_str::<u32>("0x!"), Err(err_at(0, 2, ExpectedNumber)));
+    assert_eq!(from_str::<f64>("inf"), Err(err_at(0, 0, ExpectedNumber)));
+    assert_eq!(
+        from_str::<u64>("0x10000000000000000"), // u64::MAX + 1
+        Err(err_at(0, 18, OverflowParsingNumber))
+    );
     assert_eq!(
         from_str::<u32>("007"),
         Err(err_at(0, 0, ErrorCode::LeadingZero))
+    );
+    assert_eq!(
+        from_str::<u64>("18446744073709551616"), // u64::MAX + 1
+        Err(err_at(
+            0,
+            0,
+            Message("number too large to fit in target type".to_owned())
+        ))
+    );
+    assert_eq!(
+        from_str::<i64>("0x8000000000000000"), // i64::MAX + 1
+        Err(err(Message(
+            "invalid value: integer `9223372036854775808`, expected i64".to_owned()
+        )))
+    );
+    assert_eq!(
+        from_str::<i64>("-0x8000000000000001"), // i64::MIN - 1
+        Err(err_at(
+            0,
+            0,
+            Message("out of range integral type conversion attempted".to_owned())
+        ))
     );
 }
 

@@ -1,4 +1,8 @@
-use std::{iter::Peekable, num::ParseFloatError, str::CharIndices};
+use std::{
+    fmt::Display,
+    iter::Peekable,
+    str::{CharIndices, FromStr},
+};
 
 use serde::{Deserialize, de::Visitor};
 
@@ -77,30 +81,20 @@ impl<'de> Deserializer<'de> {
         }
     }
 
-    // https://spec.json5.org/#strings
-    fn parse_string(&mut self) -> Result<StringResult<'de>> {
-        let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
-        if c == '"' || c == '\'' {
-            self.parse_string_characters(c)
-        } else {
-            Err(self.err_at(offset, ErrorCode::ExpectedString))
-        }
-    }
-
     // https://spec.json5.org/#numbers
-    fn parse_number(&mut self) -> Result<f64> {
+    fn parse_number(&mut self) -> Result<NumberResult> {
         let (start, _) = self.peek_or(ErrorCode::EofParsingNumber)?;
 
-        let sign = match self.peek_or(ErrorCode::EofParsingNumber)? {
+        let neg = match self.peek_or(ErrorCode::EofParsingNumber)? {
             (_, '+') => {
                 self.next();
-                1f64
+                false
             }
             (_, '-') => {
                 self.next();
-                -1f64
+                true
             }
-            _ => 1f64,
+            _ => false,
         };
 
         match self.next_or(ErrorCode::EofParsingNumber)? {
@@ -110,7 +104,11 @@ impl<'de> Deserializer<'de> {
                     &ErrorCode::EofParsingNumber,
                     ErrorCode::ExpectedNumber,
                 )?;
-                Ok(sign * f64::INFINITY)
+                if neg {
+                    Ok(NumberResult::F64(-f64::INFINITY))
+                } else {
+                    Ok(NumberResult::F64(f64::INFINITY))
+                }
             }
             (_, 'N') => {
                 self.expect_str(
@@ -118,39 +116,105 @@ impl<'de> Deserializer<'de> {
                     &ErrorCode::EofParsingNumber,
                     ErrorCode::ExpectedNumber,
                 )?;
-                Ok(sign * f64::NAN)
+                if neg {
+                    Ok(NumberResult::F64(-f64::NAN))
+                } else {
+                    Ok(NumberResult::F64(f64::NAN))
+                }
             }
             (_, '0') => match self.peek() {
                 Some((_, 'x' | 'X')) => {
                     self.next();
-                    Ok(sign * self.parse_unsigned_hex_number()?)
+                    self.parse_hex_number(neg, start)
                 }
-                Some((offset, '.' | 'e' | 'E')) => self.parse_decimal_number(start, offset),
+                Some((offset, '.' | 'e' | 'E')) => self.parse_decimal_number(neg, start, offset),
                 Some((_, '0'..='9')) => Err(self.err_at(start, ErrorCode::LeadingZero)),
-                _ => Ok(sign * 0f64),
+                _ => Ok(NumberResult::U64(0)),
             },
-            (offset, '.' | '1'..='9') => self.parse_decimal_number(start, offset),
+            (offset, '.' | '1'..='9') => self.parse_decimal_number(neg, start, offset),
             (offset, _) => Err(self.err_at(offset, ErrorCode::ExpectedNumber)),
         }
     }
 
     // Aside from the representation of Infinity, NaN, and hex numbers, which are handled in
-    // parse_number, f64's from_str uses exactly the same format as JSON5.
-    // https://doc.rust-lang.org/std/primitive.f64.html#method.from_str
-    fn parse_decimal_number(&mut self, start: usize, mut offset: usize) -> Result<f64> {
+    // parse_number, the f64, i64, and u64 implementations of FromStr implement exactly the format
+    // we need.
+    fn parse_decimal_number(
+        &mut self,
+        neg: bool,
+        start: usize,
+        mut offset: usize,
+    ) -> Result<NumberResult> {
         while let Some((o, c)) = self.peek()
             && matches!(c, '+' | '-' | '.' | 'e' | 'E' | '0'..='9')
         {
             self.next();
             offset = o;
         }
-        self.input[start..=offset]
-            .parse()
-            .map_err(|err: ParseFloatError| self.err_at(start, ErrorCode::Message(err.to_string())))
+        if self.input[start..=offset].contains(['.', 'e', 'E']) {
+            // https://doc.rust-lang.org/std/primitive.f64.html#method.from_str
+            Ok(NumberResult::F64(self.parse_from_str(start, offset)?))
+        } else if neg {
+            // https://doc.rust-lang.org/std/primitive.i64.html#method.from_str
+            Ok(NumberResult::I64(self.parse_from_str(start, offset)?))
+        } else {
+            // https://doc.rust-lang.org/std/primitive.u64.html#method.from_str
+            Ok(NumberResult::U64(self.parse_from_str(start, offset)?))
+        }
     }
 
-    fn parse_unsigned_hex_number(&mut self) -> Result<f64> {
-        todo!()
+    fn parse_from_str<N>(&self, start: usize, offset: usize) -> Result<N>
+    where
+        N: FromStr,
+        N::Err: Display,
+    {
+        self.input[start..=offset]
+            .parse()
+            .map_err(|err: N::Err| self.err_at(start, ErrorCode::Message(err.to_string())))
+    }
+
+    fn parse_hex_number(&mut self, neg: bool, start: usize) -> Result<NumberResult> {
+        let (offset, c) = self.next_or(ErrorCode::EofParsingNumber)?;
+        if !c.is_ascii_hexdigit() {
+            return Err(self.err_at(offset, ErrorCode::ExpectedNumber));
+        }
+        let mut n = u64::from(c.to_digit(16).expect("c is ascii hexdigit"));
+
+        while let Some((offset, c)) = self.peek()
+            && c.is_ascii_hexdigit()
+        {
+            self.next();
+            n = n
+                .checked_mul(16)
+                .and_then(|n| {
+                    n.checked_add(u64::from(c.to_digit(16).expect("c is ascii hexdigit")))
+                })
+                .ok_or(self.err_at(offset, ErrorCode::OverflowParsingNumber))?;
+        }
+
+        if neg {
+            // Special case for i64::MIN because -i64::MIN = i64::MAX + 1, so we'll overflow if we
+            // try to cast -i64::MIN from a u64 to an i64.
+            if n == 0x8000_0000_0000_0000 {
+                Ok(NumberResult::I64(i64::MIN))
+            } else {
+                Ok(NumberResult::I64(-i64::try_from(n).map_err(|err| {
+                    self.err_at(start, ErrorCode::Message(err.to_string()))
+                })?))
+            }
+        } else {
+            Ok(NumberResult::U64(n))
+        }
+    }
+
+    // https://spec.json5.org/#strings
+    fn parse_string(&mut self) -> Result<StringResult<'de>> {
+        let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
+        if c == '"' || c == '\'' {
+            self.parse_string_characters(c)
+        } else {
+            Err(self.err_at(offset, ErrorCode::ExpectedString))
+        }
     }
 
     fn parse_string_characters(&mut self, delimiter: char) -> Result<StringResult<'de>> {
@@ -235,140 +299,52 @@ impl<'de> Deserializer<'de> {
     }
 }
 
+macro_rules! deserialize_number {
+    ($method:ident) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+            match self.parse_number()? {
+                NumberResult::U64(u) => visitor.visit_u64(u),
+                NumberResult::I64(i) => visitor.visit_i64(i),
+                NumberResult::F64(f) => visitor.visit_f64(f),
+            }
+        }
+    };
+}
+
+macro_rules! deserialize_string {
+    ($method:ident) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+            match self.parse_string()? {
+                StringResult::Borrowed(borrowed) => visitor.visit_borrowed_str(borrowed),
+                StringResult::Owned(owned) => visitor.visit_string(owned),
+            }
+        }
+    };
+}
+
 impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     type Error = Error;
 
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        match self.peek_or(ErrorCode::EofParsingValue)? {
-            (_, 'n') => self.deserialize_unit(visitor),
-            (_, 't' | 'f') => self.deserialize_bool(visitor),
-            (_, '"' | '\'') => self.deserialize_str(visitor),
-            _ => todo!(),
-        }
-    }
+    deserialize_number!(deserialize_u8);
+    deserialize_number!(deserialize_u16);
+    deserialize_number!(deserialize_u32);
+    deserialize_number!(deserialize_u64);
+    deserialize_number!(deserialize_i8);
+    deserialize_number!(deserialize_i16);
+    deserialize_number!(deserialize_i32);
+    deserialize_number!(deserialize_i64);
+    deserialize_number!(deserialize_f32);
+    deserialize_number!(deserialize_f64);
 
-    fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    deserialize_string!(deserialize_str);
+    deserialize_string!(deserialize_string);
+    deserialize_string!(deserialize_char);
+
+    fn deserialize_bool<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         visitor.visit_bool(self.parse_bool()?)
     }
 
-    fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_i64(visitor)
-    }
-
-    fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_i64(visitor)
-    }
-
-    fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_i64(visitor)
-    }
-
-    fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        visitor.visit_i64(self.parse_number()? as i64)
-    }
-
-    fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_u64(visitor)
-    }
-
-    fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_u64(visitor)
-    }
-
-    fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_u64(visitor)
-    }
-
-    fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        visitor.visit_u64(self.parse_number()? as u64)
-    }
-
-    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_f64(visitor)
-    }
-
-    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        visitor.visit_f64(self.parse_number()?)
-    }
-
-    fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_str(visitor)
-    }
-
-    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        match self.parse_string()? {
-            StringResult::Borrowed(borrowed) => visitor.visit_borrowed_str(borrowed),
-            StringResult::Owned(owned) => visitor.visit_string(owned),
-        }
-    }
-
-    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        self.deserialize_str(visitor)
-    }
-
-    fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        todo!()
-    }
-
-    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        todo!()
-    }
-
-    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         if self.peek().is_some_and(|(_, c)| c == 'n') {
             self.parse_null()?;
             visitor.visit_none()
@@ -377,101 +353,100 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
         }
     }
 
-    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         self.parse_null()?;
         visitor.visit_unit()
     }
 
-    fn deserialize_unit_struct<V>(self, _: &'static str, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_unit_struct<V: Visitor<'de>>(
+        self,
+        _: &'static str,
+        visitor: V,
+    ) -> Result<V::Value> {
         self.deserialize_unit(visitor)
     }
 
-    fn deserialize_newtype_struct<V>(self, _: &'static str, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
+        self,
+        _: &'static str,
+        visitor: V,
+    ) -> Result<V::Value> {
         visitor.visit_newtype_struct(self)
     }
 
-    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         todo!()
     }
 
-    fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_tuple<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<V::Value> {
         todo!()
     }
 
-    fn deserialize_tuple_struct<V>(
+    fn deserialize_tuple_struct<V: Visitor<'de>>(
         self,
         name: &'static str,
         len: usize,
         visitor: V,
-    ) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    ) -> Result<V::Value> {
         todo!()
     }
 
-    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         todo!()
     }
 
-    fn deserialize_struct<V>(
+    fn deserialize_struct<V: Visitor<'de>>(
         self,
         name: &'static str,
         fields: &'static [&'static str],
         visitor: V,
-    ) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    ) -> Result<V::Value> {
         todo!()
     }
 
-    fn deserialize_enum<V>(
+    fn deserialize_enum<V: Visitor<'de>>(
         self,
         name: &'static str,
         variants: &'static [&'static str],
         visitor: V,
-    ) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    ) -> Result<V::Value> {
         todo!()
     }
 
-    fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_identifier<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         todo!()
     }
 
-    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
+    fn deserialize_bytes<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         todo!()
+    }
+
+    fn deserialize_byte_buf<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        todo!()
+    }
+
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        match self.peek_or(ErrorCode::EofParsingValue)? {
+            (_, 'n') => self.deserialize_unit(visitor),
+            (_, 't' | 'f') => self.deserialize_bool(visitor),
+            (_, '"' | '\'') => self.deserialize_str(visitor),
+            (_, '+' | '-' | '.' | 'I' | 'N' | '0'..='9') => self.deserialize_f64(visitor),
+            _ => todo!(),
+        }
+    }
+
+    fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        self.deserialize_any(visitor)
     }
 }
 
 enum StringResult<'de> {
     Borrowed(&'de str),
     Owned(String),
+}
+
+enum NumberResult {
+    U64(u64),
+    I64(i64),
+    F64(f64),
 }
