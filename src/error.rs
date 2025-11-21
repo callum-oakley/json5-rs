@@ -16,12 +16,14 @@ pub enum ErrorCode {
     Message(String),
 
     EofParsingBool,
+    EofParsingComment,
     EofParsingNull,
     EofParsingNumber,
     EofParsingString,
     EofParsingValue,
 
     ExpectedBool,
+    ExpectedComment,
     ExpectedNull,
     ExpectedNumber,
     ExpectedString,
@@ -39,12 +41,14 @@ impl Display for ErrorCode {
             ErrorCode::Message(msg) => write!(f, "{msg}"),
 
             ErrorCode::EofParsingBool => write!(f, "EOF parsing bool"),
+            ErrorCode::EofParsingComment => write!(f, "EOF parsing comment"),
             ErrorCode::EofParsingNull => write!(f, "EOF parsing null"),
             ErrorCode::EofParsingNumber => write!(f, "EOF parsing number"),
             ErrorCode::EofParsingString => write!(f, "EOF parsing string"),
             ErrorCode::EofParsingValue => write!(f, "EOF parsing value"),
 
             ErrorCode::ExpectedBool => write!(f, "expected bool"),
+            ErrorCode::ExpectedComment => write!(f, "expected comment"),
             ErrorCode::ExpectedNull => write!(f, "expected null"),
             ErrorCode::ExpectedNumber => write!(f, "expected number"),
             ErrorCode::ExpectedString => write!(f, "expected string"),
@@ -109,7 +113,7 @@ impl Position {
         let mut chars = input[..offset].chars().peekable();
         while let Some(c) = chars.next() {
             match c {
-                '\u{000A}' | '\u{000D}' | '\u{2028}' | '\u{2029}' => {
+                json5_line_terminator!() => {
                     // "The character sequence <CR><LF> is commonly used as a line terminator. It
                     // should be considered a single character for the purpose of reporting line
                     // numbers." – https://262.ecma-international.org/5.1/#sec-7.3

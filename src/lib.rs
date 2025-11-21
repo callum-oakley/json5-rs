@@ -1,5 +1,6 @@
 #![warn(clippy::pedantic)]
 
+#[macro_use]
 mod de;
 mod error;
 

@@ -3,6 +3,7 @@ use std::f64;
 use json5::{Error, ErrorCode, Position, from_str};
 
 use ErrorCode::*;
+use serde_derive::Deserialize;
 
 fn err_at(line: usize, column: usize, code: ErrorCode) -> Error {
     Error::new_at(Position { line, column }, code)
@@ -15,7 +16,11 @@ fn err(code: ErrorCode) -> Error {
 // https://262.ecma-international.org/5.1/#sec-7.8.1
 #[test]
 fn parse_null() {
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct Unit;
+
     assert_eq!(from_str("null"), Ok(()));
+    assert_eq!(from_str("null"), Ok(Unit));
     assert_eq!(from_str::<()>("false"), Err(err_at(0, 0, ExpectedNull)));
     assert_eq!(from_str::<()>("nil"), Err(err_at(0, 1, ExpectedNull)));
     assert_eq!(from_str::<()>("0"), Err(err_at(0, 0, ExpectedNull)));
@@ -25,8 +30,12 @@ fn parse_null() {
 // https://262.ecma-international.org/5.1/#sec-7.8.2
 #[test]
 fn parse_bool() {
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct Newtype(bool);
+
     assert_eq!(from_str("true"), Ok(true));
     assert_eq!(from_str("false"), Ok(false));
+    assert_eq!(from_str("true"), Ok(Newtype(true)));
     assert_eq!(from_str::<bool>("null"), Err(err_at(0, 0, ExpectedBool)));
     assert_eq!(from_str::<bool>("yes"), Err(err_at(0, 0, ExpectedBool)));
     assert_eq!(from_str::<bool>("0"), Err(err_at(0, 0, ExpectedBool)));
@@ -81,6 +90,12 @@ fn parse_string() {
         Err(err(Message(
             "invalid type: string \"two\\nlines\", expected a borrowed string".to_owned(),
         ))),
+    );
+    assert_eq!(
+        from_str::<char>("'ab'"),
+        Err(err(Message(
+            "invalid value: string \"ab\", expected a character".to_owned()
+        )))
     );
 }
 
@@ -149,4 +164,20 @@ fn parse_number() {
 fn deserialize_option() {
     assert_eq!(from_str::<Option<bool>>("null"), Ok(None));
     assert_eq!(from_str::<Option<bool>>("true"), Ok(Some(true)));
+}
+
+#[test]
+fn comments() {
+    assert_eq!(
+        from_str(
+            "
+            // Single line comment
+            /* Multi
+               line
+               comment */
+            null
+            "
+        ),
+        Ok(())
+    );
 }

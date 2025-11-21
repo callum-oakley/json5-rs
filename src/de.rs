@@ -11,6 +11,7 @@ use crate::{Error, ErrorCode, Position, Result};
 pub fn from_str<'de, T: Deserialize<'de>>(input: &'de str) -> Result<T> {
     let mut deserializer = Deserializer::from_str(input);
     let t = T::deserialize(&mut deserializer)?;
+    deserializer.skip_whitespace()?;
     match deserializer.peek() {
         Some((offset, _)) => Err(deserializer.err_at(offset, ErrorCode::TrailingCharacters)),
         None => Ok(t),
@@ -63,11 +64,60 @@ impl<'de> Deserializer<'de> {
         Ok(())
     }
 
+    // https://spec.json5.org/#white-space
+    fn skip_whitespace(&mut self) -> Result<()> {
+        while let Some((_, c)) = self.peek() {
+            match c {
+                json5_whitespace!() => {
+                    self.next();
+                }
+                '/' => {
+                    self.next();
+                    self.skip_comment()?;
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // https://spec.json5.org/#comments
+    fn skip_comment(&mut self) -> Result<()> {
+        let (offset, c) = self.next_or(ErrorCode::EofParsingComment)?;
+        match c {
+            '/' => {
+                while let Some((_, c)) = self.next() {
+                    if matches!(c, json5_line_terminator!()) {
+                        break;
+                    }
+                }
+            }
+            '*' => {
+                while let Some((_, c)) = self.next() {
+                    if c == '*' && self.peek().is_some_and(|(_, c)| c == '/') {
+                        self.next();
+                        break;
+                    }
+                }
+            }
+            _ => {
+                return Err(self.err_at(offset, ErrorCode::ExpectedComment));
+            }
+        }
+        Ok(())
+    }
+
     fn parse_null(&mut self) -> Result<()> {
+        self.skip_whitespace()?;
+
         self.expect_str("null", &ErrorCode::EofParsingNull, ErrorCode::ExpectedNull)
     }
 
     fn parse_bool(&mut self) -> Result<bool> {
+        self.skip_whitespace()?;
+
         match self.next_or(ErrorCode::EofParsingBool)? {
             (_, 't') => {
                 self.expect_str("rue", &ErrorCode::EofParsingBool, ErrorCode::ExpectedBool)?;
@@ -83,6 +133,8 @@ impl<'de> Deserializer<'de> {
 
     // https://spec.json5.org/#numbers
     fn parse_number(&mut self) -> Result<NumberResult> {
+        self.skip_whitespace()?;
+
         let (start, _) = self.peek_or(ErrorCode::EofParsingNumber)?;
 
         let neg = match self.peek_or(ErrorCode::EofParsingNumber)? {
@@ -209,6 +261,8 @@ impl<'de> Deserializer<'de> {
 
     // https://spec.json5.org/#strings
     fn parse_string(&mut self) -> Result<StringResult<'de>> {
+        self.skip_whitespace()?;
+
         let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
         if c == '"' || c == '\'' {
             self.parse_string_characters(c)
@@ -450,3 +504,55 @@ enum NumberResult {
     I64(i64),
     F64(f64),
 }
+
+// We have to be careful here because the JSON5 definition of whitespace doesn't quite align with
+// `char::is_whitespace`.
+//
+// https://spec.json5.org/#white-space lists
+// U+0009	Horizontal tab
+// U+000A	Line feed
+// U+000B	Vertical tab
+// U+000C	Form feed
+// U+000D	Carriage return
+// U+0020	Space
+// U+00A0	Non-breaking space
+// U+2028	Line separator
+// U+2029	Paragraph separator
+// U+FEFF	Byte order mark
+// Unicode Zs category	Any other character in the Space Separator Unicode category
+//
+// https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedGeneralCategory.txt lists
+// 0020          ; Zs #       SPACE
+// 00A0          ; Zs #       NO-BREAK SPACE
+// 1680          ; Zs #       OGHAM SPACE MARK
+// 2000..200A    ; Zs #  [11] EN QUAD..HAIR SPACE
+// 202F          ; Zs #       NARROW NO-BREAK SPACE
+// 205F          ; Zs #       MEDIUM MATHEMATICAL SPACE
+// 3000          ; Zs #       IDEOGRAPHIC SPACE
+macro_rules! json5_whitespace {
+    () => {
+        '\u{0009}'..='\u{000D}' | // Horizontal tab..Carriage return
+        '\u{0020}' |              // Space
+        '\u{00A0}' |              // Non-breaking space
+        '\u{2028}' |              // Line separator
+        '\u{2029}' |              // Paragraph separator
+        '\u{FEFF}' |              // Byte order mark
+        '\u{1680}' |              // OGHAM SPACE MARK
+        '\u{2000}'..='\u{200A}' | // EN QUAD..HAIR SPACE
+        '\u{202F}' |              // NARROW NO-BREAK SPACE
+        '\u{205F}' |              // MEDIUM MATHEMATICAL SPACE
+        '\u{3000}'                // IDEOGRAPHIC SPACE
+    }
+}
+use json5_whitespace;
+
+// https://262.ecma-international.org/5.1/#sec-7.3
+macro_rules! json5_line_terminator {
+    () => {
+        '\u{000A}' | // Line Feed
+        '\u{000D}' | // Carriage Return
+        '\u{2028}' | // Line separator
+        '\u{2029}'   // Paragraph separator
+    }
+}
+use json5_line_terminator;
