@@ -46,20 +46,25 @@ impl<'de> Deserializer<'de> {
         self.char_indices.peek().copied()
     }
 
-    fn next_or(&mut self, code: ErrorCode) -> Result<(usize, char)> {
-        self.next().ok_or(Error::new(code))
+    fn next_or(&mut self, eof: ErrorCode) -> Result<(usize, char)> {
+        self.next().ok_or_else(|| Error::new(eof))
     }
 
-    fn peek_or(&mut self, code: ErrorCode) -> Result<(usize, char)> {
-        self.peek().ok_or(Error::new(code))
+    fn peek_or(&mut self, eof: ErrorCode) -> Result<(usize, char)> {
+        self.peek().ok_or_else(|| Error::new(eof))
     }
 
-    fn expect_str(&mut self, ident: &str, eof: &ErrorCode, unexpected: ErrorCode) -> Result<()> {
-        for expected in ident.chars() {
-            let (offset, c) = self.next_or(eof.clone())?;
-            if c != expected {
-                return Err(self.err_at(offset, unexpected));
-            }
+    fn expect_char(&mut self, expected: char, eof: ErrorCode, unexpected: ErrorCode) -> Result<()> {
+        let (offset, c) = self.next_or(eof)?;
+        if c != expected {
+            return Err(self.err_at(offset, unexpected));
+        }
+        Ok(())
+    }
+
+    fn expect_str(&mut self, expected: &str, eof: ErrorCode, unexpected: ErrorCode) -> Result<()> {
+        for e in expected.chars() {
+            self.expect_char(e, eof, unexpected)?;
         }
         Ok(())
     }
@@ -112,7 +117,7 @@ impl<'de> Deserializer<'de> {
     fn parse_null(&mut self) -> Result<()> {
         self.skip_whitespace()?;
 
-        self.expect_str("null", &ErrorCode::EofParsingNull, ErrorCode::ExpectedNull)
+        self.expect_str("null", ErrorCode::EofParsingNull, ErrorCode::ExpectedNull)
     }
 
     fn parse_bool(&mut self) -> Result<bool> {
@@ -120,11 +125,11 @@ impl<'de> Deserializer<'de> {
 
         match self.next_or(ErrorCode::EofParsingBool)? {
             (_, 't') => {
-                self.expect_str("rue", &ErrorCode::EofParsingBool, ErrorCode::ExpectedBool)?;
+                self.expect_str("rue", ErrorCode::EofParsingBool, ErrorCode::ExpectedBool)?;
                 Ok(true)
             }
             (_, 'f') => {
-                self.expect_str("alse", &ErrorCode::EofParsingBool, ErrorCode::ExpectedBool)?;
+                self.expect_str("alse", ErrorCode::EofParsingBool, ErrorCode::ExpectedBool)?;
                 Ok(false)
             }
             (offset, _) => Err(self.err_at(offset, ErrorCode::ExpectedBool)),
@@ -153,7 +158,7 @@ impl<'de> Deserializer<'de> {
             (_, 'I') => {
                 self.expect_str(
                     "nfinity",
-                    &ErrorCode::EofParsingNumber,
+                    ErrorCode::EofParsingNumber,
                     ErrorCode::ExpectedNumber,
                 )?;
                 if neg {
@@ -163,11 +168,7 @@ impl<'de> Deserializer<'de> {
                 }
             }
             (_, 'N') => {
-                self.expect_str(
-                    "aN",
-                    &ErrorCode::EofParsingNumber,
-                    ErrorCode::ExpectedNumber,
-                )?;
+                self.expect_str("aN", ErrorCode::EofParsingNumber, ErrorCode::ExpectedNumber)?;
                 if neg {
                     Ok(NumberResult::F64(-f64::NAN))
                 } else {
@@ -222,7 +223,7 @@ impl<'de> Deserializer<'de> {
     {
         self.input[start..=offset]
             .parse()
-            .map_err(|err: N::Err| self.err_at(start, ErrorCode::Message(err.to_string())))
+            .map_err(|err: N::Err| self.custom_err_at(start, err))
     }
 
     fn parse_hex_number(&mut self, neg: bool, start: usize) -> Result<NumberResult> {
@@ -245,14 +246,13 @@ impl<'de> Deserializer<'de> {
         }
 
         if neg {
-            // Special case for i64::MIN because -i64::MIN = i64::MAX + 1, so we'll overflow if we
-            // try to cast -i64::MIN from a u64 to an i64.
+            // Special case for i64::MIN because -i64::MIN = i64::MAX + 1 doesn't fit in an i64.
             if n == 0x8000_0000_0000_0000 {
                 Ok(NumberResult::I64(i64::MIN))
             } else {
-                Ok(NumberResult::I64(-i64::try_from(n).map_err(|err| {
-                    self.err_at(start, ErrorCode::Message(err.to_string()))
-                })?))
+                Ok(NumberResult::I64(
+                    -i64::try_from(n).map_err(|err| self.custom_err_at(start, err))?,
+                ))
             }
         } else {
             Ok(NumberResult::U64(n))
@@ -302,7 +302,7 @@ impl<'de> Deserializer<'de> {
         let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
         match c {
             // LineTerminatorSequence
-            '\u{000A}' | '\u{000D}' | '\u{2028}' | '\u{2029}' => {
+            json5_line_terminator!() => {
                 if c == '\u{000D}' && self.peek().is_some_and(|(_, c)| c == '\u{000A}') {
                     self.next();
                 }
@@ -351,6 +351,10 @@ impl<'de> Deserializer<'de> {
     fn err_at(&self, offset: usize, code: ErrorCode) -> Error {
         Error::new_at(Position::from_offset(offset, self.input), code)
     }
+
+    fn custom_err_at<T: Display>(&self, offset: usize, msg: T) -> Error {
+        Error::custom_at(Position::from_offset(offset, self.input), msg)
+    }
 }
 
 macro_rules! deserialize_number {
@@ -376,6 +380,40 @@ macro_rules! deserialize_string {
     };
 }
 
+macro_rules! deserialize_collection {
+    (
+        $method:ident,
+        $visit:ident,
+        $access:ident,
+        $open:expr,
+        $close:expr,
+        $eof:expr,
+        $expected_opening:expr,
+        $expected_closing:expr,
+    ) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+            self.skip_whitespace()?;
+            self.expect_char($open, $eof, $expected_opening)?;
+            let value = visitor.$visit($access {
+                de: self,
+                first: true,
+            })?;
+
+            self.skip_whitespace()?;
+            let (offset, c) = self.next_or($eof)?;
+            match c {
+                $close => Ok(value),
+                ',' => {
+                    self.skip_whitespace()?;
+                    self.expect_char($close, $eof, $expected_closing)?;
+                    Ok(value)
+                }
+                _ => Err(self.err_at(offset, $expected_closing)),
+            }
+        }
+    };
+}
+
 impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     type Error = Error;
 
@@ -393,6 +431,27 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     deserialize_string!(deserialize_str);
     deserialize_string!(deserialize_string);
     deserialize_string!(deserialize_char);
+
+    deserialize_collection!(
+        deserialize_seq,
+        visit_seq,
+        SeqAccess,
+        '[',
+        ']',
+        ErrorCode::EofParsingArray,
+        ErrorCode::ExpectedOpeningBracket,
+        ErrorCode::ExpectedClosingBracket,
+    );
+    deserialize_collection!(
+        deserialize_map,
+        visit_map,
+        MapAccess,
+        '{',
+        '}',
+        ErrorCode::EofParsingObject,
+        ErrorCode::ExpectedOpeningBrace,
+        ErrorCode::ExpectedClosingBrace,
+    );
 
     fn deserialize_bool<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         visitor.visit_bool(self.parse_bool()?)
@@ -428,25 +487,17 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
         visitor.visit_newtype_struct(self)
     }
 
-    fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        todo!()
-    }
-
-    fn deserialize_tuple<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<V::Value> {
-        todo!()
+    fn deserialize_tuple<V: Visitor<'de>>(self, _: usize, visitor: V) -> Result<V::Value> {
+        self.deserialize_seq(visitor)
     }
 
     fn deserialize_tuple_struct<V: Visitor<'de>>(
         self,
-        name: &'static str,
-        len: usize,
+        _: &'static str,
+        _: usize,
         visitor: V,
     ) -> Result<V::Value> {
-        todo!()
-    }
-
-    fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        todo!()
+        self.deserialize_seq(visitor)
     }
 
     fn deserialize_struct<V: Visitor<'de>>(
@@ -480,17 +531,75 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     }
 
     fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        self.skip_whitespace()?;
         match self.peek_or(ErrorCode::EofParsingValue)? {
             (_, 'n') => self.deserialize_unit(visitor),
             (_, 't' | 'f') => self.deserialize_bool(visitor),
             (_, '"' | '\'') => self.deserialize_str(visitor),
             (_, '+' | '-' | '.' | 'I' | 'N' | '0'..='9') => self.deserialize_f64(visitor),
-            _ => todo!(),
+            (_, '[') => self.deserialize_seq(visitor),
+            (_, '{') => self.deserialize_map(visitor),
+            (offset, _) => Err(self.err_at(offset, ErrorCode::ExpectedValue)),
         }
     }
 
     fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         self.deserialize_any(visitor)
+    }
+}
+
+struct SeqAccess<'a, 'de: 'a> {
+    de: &'a mut Deserializer<'de>,
+    first: bool,
+}
+
+impl<'de> serde::de::SeqAccess<'de> for SeqAccess<'_, 'de> {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
+    where
+        T: serde::de::DeserializeSeed<'de>,
+    {
+        self.de.skip_whitespace()?;
+        if self.de.peek().is_some_and(|(_, c)| c == ']') {
+            return Ok(None);
+        }
+
+        if !self.first {
+            self.de
+                .expect_char(',', ErrorCode::EofParsingArray, ErrorCode::ExpectedComma)?;
+
+            self.de.skip_whitespace()?;
+            if self.de.peek().is_some_and(|(_, c)| c == ']') {
+                return Ok(None);
+            }
+        }
+        self.first = false;
+
+        seed.deserialize(&mut *self.de).map(Some)
+    }
+}
+
+struct MapAccess<'a, 'de: 'a> {
+    de: &'a mut Deserializer<'de>,
+    first: bool,
+}
+
+impl<'de> serde::de::MapAccess<'de> for MapAccess<'_, 'de> {
+    type Error = Error;
+
+    fn next_key_seed<K>(&mut self, seed: K) -> std::result::Result<Option<K::Value>, Self::Error>
+    where
+        K: serde::de::DeserializeSeed<'de>,
+    {
+        todo!()
+    }
+
+    fn next_value_seed<V>(&mut self, seed: V) -> std::result::Result<V::Value, Self::Error>
+    where
+        V: serde::de::DeserializeSeed<'de>,
+    {
+        todo!()
     }
 }
 

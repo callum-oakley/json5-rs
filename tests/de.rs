@@ -1,16 +1,22 @@
-use std::f64;
-
 use json5::{Error, ErrorCode, Position, from_str};
 
 use ErrorCode::*;
 use serde_derive::Deserialize;
 
+fn err(code: ErrorCode) -> Error {
+    Error::new(code)
+}
+
 fn err_at(line: usize, column: usize, code: ErrorCode) -> Error {
     Error::new_at(Position { line, column }, code)
 }
 
-fn err(code: ErrorCode) -> Error {
-    Error::new(code)
+fn custom_err(msg: &str) -> Error {
+    Error::custom(msg)
+}
+
+fn custom_err_at(line: usize, column: usize, msg: &str) -> Error {
+    Error::custom_at(Position { line, column }, msg)
 }
 
 // https://262.ecma-international.org/5.1/#sec-7.8.1
@@ -40,63 +46,6 @@ fn parse_bool() {
     assert_eq!(from_str::<bool>("yes"), Err(err_at(0, 0, ExpectedBool)));
     assert_eq!(from_str::<bool>("0"), Err(err_at(0, 0, ExpectedBool)));
     assert_eq!(from_str::<bool>("t"), Err(err(EofParsingBool)));
-}
-
-// https://spec.json5.org/#strings
-#[test]
-fn parse_string() {
-    assert_eq!(from_str(r#""can borrow""#), Ok("can borrow"));
-    assert_eq!(from_str(r#"'"quotes"'"#), Ok(r#""quotes""#));
-    assert_eq!(from_str(r#""'quotes'""#), Ok("'quotes'"));
-    assert_eq!(from_str(r#"'你好!'"#), Ok("你好!"));
-    assert_eq!(from_str("'\u{2028}\u{2029}'"), Ok("\u{2028}\u{2029}"));
-    assert_eq!(from_str(r#"'a'"#), Ok('a'));
-    assert_eq!(from_str(r#"'好'"#), Ok('好'));
-    assert_eq!(from_str(r#""two\nlines""#), Ok("two\nlines".to_owned()));
-    assert_eq!(from_str("'one \\\nline'"), Ok("one line".to_owned()));
-    assert_eq!(from_str("'one \\\r\nline'"), Ok("one line".to_owned()));
-    assert_eq!(from_str(r#""zero: '\0'""#), Ok("zero: '\0'".to_owned()));
-    assert_eq!(from_str(r#"'\u4f60\u597d\x21'"#), Ok("你好!".to_owned()));
-
-    assert_eq!(
-        from_str::<char>(r#"'ab'"#),
-        Err(err(Message(
-            "invalid value: string \"ab\", expected a character".to_owned()
-        )))
-    );
-    assert_eq!(
-        from_str::<String>("'one\ntwo'"),
-        Err(err_at(0, 4, LineTerminatorInString))
-    );
-    assert_eq!(
-        from_str::<String>(r#"'\01'"#),
-        Err(err_at(0, 3, InvalidEscapeSequence))
-    );
-    assert_eq!(
-        from_str::<String>(r#"'\42'"#),
-        Err(err_at(0, 2, InvalidEscapeSequence))
-    );
-    assert_eq!(
-        from_str::<String>(r#"'\ubar'"#),
-        Err(err_at(0, 5, InvalidEscapeSequence))
-    );
-    assert_eq!(
-        from_str::<String>("false"),
-        Err(err_at(0, 0, ExpectedString))
-    );
-    assert_eq!(from_str::<String>("'..."), Err(err(EofParsingString)));
-    assert_eq!(
-        from_str::<&str>(r#""two\nlines""#),
-        Err(err(Message(
-            "invalid type: string \"two\\nlines\", expected a borrowed string".to_owned(),
-        ))),
-    );
-    assert_eq!(
-        from_str::<char>("'ab'"),
-        Err(err(Message(
-            "invalid value: string \"ab\", expected a character".to_owned()
-        )))
-    );
 }
 
 // https://spec.json5.org/#numbers
@@ -138,26 +87,134 @@ fn parse_number() {
     );
     assert_eq!(
         from_str::<u64>("18446744073709551616"), // u64::MAX + 1
-        Err(err_at(
+        Err(custom_err_at(
             0,
             0,
-            Message("number too large to fit in target type".to_owned())
+            "number too large to fit in target type"
         ))
     );
     assert_eq!(
         from_str::<i64>("0x8000000000000000"), // i64::MAX + 1
-        Err(err(Message(
-            "invalid value: integer `9223372036854775808`, expected i64".to_owned()
-        )))
+        Err(custom_err(
+            "invalid value: integer `9223372036854775808`, expected i64"
+        ))
     );
     assert_eq!(
         from_str::<i64>("-0x8000000000000001"), // i64::MIN - 1
-        Err(err_at(
+        Err(custom_err_at(
             0,
             0,
-            Message("out of range integral type conversion attempted".to_owned())
+            "out of range integral type conversion attempted"
         ))
     );
+}
+
+// https://spec.json5.org/#strings
+#[test]
+fn parse_string() {
+    assert_eq!(from_str(r#""can borrow""#), Ok("can borrow"));
+    assert_eq!(from_str(r#"'"quotes"'"#), Ok(r#""quotes""#));
+    assert_eq!(from_str(r#""'quotes'""#), Ok("'quotes'"));
+    assert_eq!(from_str(r#"'你好!'"#), Ok("你好!"));
+    assert_eq!(from_str("'\u{2028}\u{2029}'"), Ok("\u{2028}\u{2029}"));
+    assert_eq!(from_str(r#"'a'"#), Ok('a'));
+    assert_eq!(from_str(r#"'好'"#), Ok('好'));
+    assert_eq!(from_str(r#""two\nlines""#), Ok("two\nlines".to_owned()));
+    assert_eq!(from_str("'one \\\nline'"), Ok("one line".to_owned()));
+    assert_eq!(from_str("'one \\\r\nline'"), Ok("one line".to_owned()));
+    assert_eq!(from_str(r#""zero: '\0'""#), Ok("zero: '\0'".to_owned()));
+    assert_eq!(from_str(r#"'\u4f60\u597d\x21'"#), Ok("你好!".to_owned()));
+
+    assert_eq!(
+        from_str::<char>(r#"'ab'"#),
+        Err(custom_err(
+            "invalid value: string \"ab\", expected a character"
+        ))
+    );
+    assert_eq!(
+        from_str::<String>("'one\ntwo'"),
+        Err(err_at(0, 4, LineTerminatorInString))
+    );
+    assert_eq!(
+        from_str::<String>(r#"'\01'"#),
+        Err(err_at(0, 3, InvalidEscapeSequence))
+    );
+    assert_eq!(
+        from_str::<String>(r#"'\42'"#),
+        Err(err_at(0, 2, InvalidEscapeSequence))
+    );
+    assert_eq!(
+        from_str::<String>(r#"'\ubar'"#),
+        Err(err_at(0, 5, InvalidEscapeSequence))
+    );
+    assert_eq!(
+        from_str::<String>("false"),
+        Err(err_at(0, 0, ExpectedString))
+    );
+    assert_eq!(from_str::<String>("'..."), Err(err(EofParsingString)));
+    assert_eq!(
+        from_str::<&str>(r#""two\nlines""#),
+        Err(custom_err(
+            "invalid type: string \"two\\nlines\", expected a borrowed string",
+        )),
+    );
+    assert_eq!(
+        from_str::<char>("'ab'"),
+        Err(custom_err(
+            "invalid value: string \"ab\", expected a character"
+        ))
+    );
+}
+
+#[test]
+fn parse_array() {
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct TupleStruct(char, i32, bool);
+
+    assert_eq!(from_str::<Vec<()>>("[]"), Ok(vec![]));
+    assert_eq!(from_str("[null]"), Ok(vec![()]));
+    assert_eq!(from_str("[1, 2, 3]"), Ok(vec![1, 2, 3]));
+    assert_eq!(from_str("['a', 4, 'three']"), Ok(('a', 4, "three")));
+    assert_eq!(from_str("['b', 5, false]"), Ok(TupleStruct('b', 5, false)));
+    assert_eq!(
+        from_str("[[1, 2], [3, 4]]"),
+        Ok(vec![vec![1, 2], vec![3, 4]])
+    );
+    assert_eq!(
+        from_str(
+            "
+            [
+                'a',
+                'b',
+                'c', // Trailing comma!
+            ]
+            "
+        ),
+        Ok(vec!['a', 'b', 'c'])
+    );
+
+    assert_eq!(
+        from_str::<Vec<i32>>("null"),
+        Err(err_at(0, 0, ExpectedOpeningBracket))
+    );
+    assert_eq!(
+        from_str::<(i32, i32)>("[1, 2, 3]"),
+        Err(err_at(0, 7, ExpectedClosingBracket))
+    );
+    assert_eq!(from_str::<Vec<i32>>("[1, 2"), Err(err(EofParsingArray)));
+    assert_eq!(
+        from_str::<Vec<i32>>("[1 2]"),
+        Err(err_at(0, 3, ExpectedComma))
+    );
+    assert_eq!(
+        from_str::<Vec<i32>>("[ , ]"),
+        Err(err_at(0, 2, ExpectedNumber))
+    );
+}
+
+#[test]
+fn parse_object() {
+    // TODO
 }
 
 #[test]

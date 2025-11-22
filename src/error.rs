@@ -1,32 +1,47 @@
-use std::{
-    fmt::{Display, Formatter},
-    num::ParseFloatError,
-};
+use std::fmt::{Display, Formatter};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Error {
-    code: ErrorCode,
+    inner: Box<ErrorInner>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ErrorInner {
+    content: ErrorContent,
     position: Option<Position>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ErrorCode {
-    Message(String),
+pub enum ErrorContent {
+    Code(ErrorCode),
+    Custom(String),
+}
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ErrorCode {
+    EofParsingArray,
     EofParsingBool,
     EofParsingComment,
     EofParsingNull,
     EofParsingNumber,
+    EofParsingObject,
     EofParsingString,
     EofParsingValue,
 
     ExpectedBool,
+    ExpectedClosingBrace,
+    ExpectedClosingBracket,
+    ExpectedColon,
+    ExpectedComma,
     ExpectedComment,
     ExpectedNull,
     ExpectedNumber,
+    ExpectedOpeningBrace,
+    ExpectedOpeningBracket,
     ExpectedString,
+    ExpectedValue,
 
     InvalidEscapeSequence,
     LeadingZero,
@@ -38,20 +53,27 @@ pub enum ErrorCode {
 impl Display for ErrorCode {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            ErrorCode::Message(msg) => write!(f, "{msg}"),
-
+            ErrorCode::EofParsingArray => write!(f, "EOF parsing array"),
             ErrorCode::EofParsingBool => write!(f, "EOF parsing bool"),
             ErrorCode::EofParsingComment => write!(f, "EOF parsing comment"),
             ErrorCode::EofParsingNull => write!(f, "EOF parsing null"),
             ErrorCode::EofParsingNumber => write!(f, "EOF parsing number"),
+            ErrorCode::EofParsingObject => write!(f, "EOF parsing object"),
             ErrorCode::EofParsingString => write!(f, "EOF parsing string"),
             ErrorCode::EofParsingValue => write!(f, "EOF parsing value"),
 
             ErrorCode::ExpectedBool => write!(f, "expected bool"),
+            ErrorCode::ExpectedClosingBrace => write!(f, "expected closing brace"),
+            ErrorCode::ExpectedClosingBracket => write!(f, "expected closing bracket"),
+            ErrorCode::ExpectedColon => write!(f, "expected colon"),
+            ErrorCode::ExpectedComma => write!(f, "expected comma"),
             ErrorCode::ExpectedComment => write!(f, "expected comment"),
             ErrorCode::ExpectedNull => write!(f, "expected null"),
             ErrorCode::ExpectedNumber => write!(f, "expected number"),
+            ErrorCode::ExpectedOpeningBrace => write!(f, "expected opening brace"),
+            ErrorCode::ExpectedOpeningBracket => write!(f, "expected opening bracket"),
             ErrorCode::ExpectedString => write!(f, "expected string"),
+            ErrorCode::ExpectedValue => write!(f, "expected value"),
 
             ErrorCode::InvalidEscapeSequence => write!(f, "invalid escape sequence"),
             ErrorCode::LeadingZero => write!(f, "leading zero"),
@@ -62,37 +84,70 @@ impl Display for ErrorCode {
     }
 }
 
+impl Display for ErrorContent {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            ErrorContent::Code(code) => write!(f, "{code}"),
+            ErrorContent::Custom(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        if let Some(position) = self.inner.position {
+            write!(f, "{} at {}", self.inner.content, position)
+        } else {
+            write!(f, "{}", self.inner.content)
+        }
+    }
+}
+
 impl Error {
     #[must_use]
     pub fn new(code: ErrorCode) -> Self {
         Self {
-            code,
-            position: None,
+            inner: Box::new(ErrorInner {
+                content: ErrorContent::Code(code),
+                position: None,
+            }),
         }
     }
 
     #[must_use]
     pub fn new_at(position: Position, code: ErrorCode) -> Self {
         Self {
-            code,
-            position: Some(position),
+            inner: Box::new(ErrorInner {
+                content: ErrorContent::Code(code),
+                position: Some(position),
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn custom<T: Display>(msg: T) -> Self {
+        Self {
+            inner: Box::new(ErrorInner {
+                content: ErrorContent::Custom(msg.to_string()),
+                position: None,
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn custom_at<T: Display>(position: Position, msg: T) -> Self {
+        Self {
+            inner: Box::new(ErrorInner {
+                content: ErrorContent::Custom(msg.to_string()),
+                position: Some(position),
+            }),
         }
     }
 }
 
 impl serde::de::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
-        Error::new(ErrorCode::Message(msg.to_string()))
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        if let Some(position) = self.position {
-            write!(f, "{} at {}", self.code, position)
-        } else {
-            write!(f, "{}", self.code)
-        }
+        Self::custom(msg)
     }
 }
 
@@ -107,7 +162,6 @@ pub struct Position {
 }
 
 impl Position {
-    #[must_use]
     pub fn from_offset(offset: usize, input: &str) -> Self {
         let mut res = Self { line: 0, column: 0 };
         let mut chars = input[..offset].chars().peekable();
