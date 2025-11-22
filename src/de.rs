@@ -4,7 +4,7 @@ use std::{
     str::{CharIndices, FromStr},
 };
 
-use serde::{Deserialize, de::Visitor};
+use serde::{Deserialize, de::Visitor, forward_to_deserialize_any};
 
 use crate::{Error, ErrorCode, Position, Result};
 
@@ -348,6 +348,23 @@ impl<'de> Deserializer<'de> {
         Ok(char::from_u32(value).expect("escape sequence isn't long enough to overflow a char"))
     }
 
+    // https://spec.json5.org/#objects
+    fn parse_key(&mut self) -> Result<StringResult<'de>> {
+        self.skip_whitespace()?;
+
+        match self.peek_or(ErrorCode::EofParsingObject)? {
+            (_, '"' | '\'') => self.parse_string(),
+            _ => self.parse_identifier(),
+        }
+    }
+
+    // https://262.ecma-international.org/5.1/#sec-7.6
+    fn parse_identifier(&mut self) -> Result<StringResult<'de>> {
+        // We only call this from parse_key, so no need to skip_whitespace
+        let (offset, c) = self.next_or(ErrorCode::EofParsingObject)?;
+        todo!()
+    }
+
     fn err_at(&self, offset: usize, code: ErrorCode) -> Error {
         Error::new_at(Position::from_offset(offset, self.input), code)
     }
@@ -431,6 +448,7 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     deserialize_string!(deserialize_str);
     deserialize_string!(deserialize_string);
     deserialize_string!(deserialize_char);
+    deserialize_string!(deserialize_identifier);
 
     deserialize_collection!(
         deserialize_seq,
@@ -518,10 +536,6 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
         todo!()
     }
 
-    fn deserialize_identifier<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        todo!()
-    }
-
     fn deserialize_bytes<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         todo!()
     }
@@ -588,18 +602,61 @@ struct MapAccess<'a, 'de: 'a> {
 impl<'de> serde::de::MapAccess<'de> for MapAccess<'_, 'de> {
     type Error = Error;
 
-    fn next_key_seed<K>(&mut self, seed: K) -> std::result::Result<Option<K::Value>, Self::Error>
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
     where
         K: serde::de::DeserializeSeed<'de>,
     {
-        todo!()
+        self.de.skip_whitespace()?;
+        if self.de.peek().is_some_and(|(_, c)| c == '}') {
+            return Ok(None);
+        }
+
+        if !self.first {
+            self.de
+                .expect_char(',', ErrorCode::EofParsingObject, ErrorCode::ExpectedComma)?;
+
+            self.de.skip_whitespace()?;
+            if self.de.peek().is_some_and(|(_, c)| c == '}') {
+                return Ok(None);
+            }
+        }
+        self.first = false;
+
+        seed.deserialize(MapKey { de: self.de }).map(Some)
     }
 
-    fn next_value_seed<V>(&mut self, seed: V) -> std::result::Result<V::Value, Self::Error>
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
     where
         V: serde::de::DeserializeSeed<'de>,
     {
-        todo!()
+        self.de.skip_whitespace()?;
+        self.de
+            .expect_char(':', ErrorCode::EofParsingObject, ErrorCode::ExpectedColon)?;
+        seed.deserialize(&mut *self.de)
+    }
+}
+
+struct MapKey<'a, 'de: 'a> {
+    de: &'a mut Deserializer<'de>,
+}
+
+impl<'de> serde::de::Deserializer<'de> for MapKey<'_, 'de> {
+    type Error = Error;
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        match self.de.parse_key()? {
+            StringResult::Borrowed(borrowed) => visitor.visit_borrowed_str(borrowed),
+            StringResult::Owned(owned) => visitor.visit_string(owned),
+        }
+    }
+
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes byte_buf option
+        unit unit_struct newtype_struct seq tuple tuple_struct map struct enum identifier
+        ignored_any
     }
 }
 
