@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use json5::{Error, ErrorCode, Position, from_str};
 
 use ErrorCode::*;
+use serde_bytes::ByteBuf;
 use serde_derive::Deserialize;
 
 fn err(code: ErrorCode) -> Error {
@@ -126,6 +127,8 @@ fn parse_string() {
     assert_eq!(from_str("'one \\\r\nline'"), Ok("one line".to_owned()));
     assert_eq!(from_str(r#""zero: '\0'""#), Ok("zero: '\0'".to_owned()));
     assert_eq!(from_str(r#"'\u4f60\u597d\x21'"#), Ok("你好!".to_owned()));
+    assert_eq!(from_str("'foo'"), Ok("foo".as_bytes()));
+    assert_eq!(from_str(r#""two\nlines""#), Ok(ByteBuf::from("two\nlines")));
 
     assert_eq!(
         from_str::<char>(r#"'ab'"#),
@@ -304,8 +307,75 @@ fn parse_object() {
             }
         ])
     );
+    assert_eq!(
+        from_str(r#"{ _123 : 42 }"#),
+        Ok(HashMap::from([("_123", 42)]))
+    );
+    assert_eq!(
+        from_str(r#"{ \u4f60\u597d: 42 }"#),
+        Ok(HashMap::from([("你好".to_owned(), 42)]))
+    );
+    assert_eq!(
+        from_str("{ '0': 'zero', '1': 'one' }"),
+        Ok(HashMap::from([(0, "zero"), (1, "one")]))
+    );
+    assert_eq!(
+        from_str("{ true: 'yes', false: 'no' }"),
+        Ok(HashMap::from([(true, "yes"), (false, "no")]))
+    );
+    assert_eq!(
+        from_str(r#"{ null: "not sure why you'd want this" }"#),
+        Ok(HashMap::from([((), "not sure why you'd want this")]))
+    );
+    assert_eq!(
+        from_str("{ a: 0, b: 1 }"),
+        Ok(HashMap::from([(Some('a'), 0), (Some('b'), 1)]))
+    );
+    assert_eq!(
+        from_str(
+            "
+            // An object with two properties
+            // and a trailing comma
+            {
+                width: 1920,
+                height: 1080,
+            }
+            "
+        ),
+        Ok(HashMap::from([
+            ("width".as_bytes(), 1920),
+            ("height".as_bytes(), 1080)
+        ]))
+    );
 
-    // TODO identifiers with escapes, non-string keys, errors
+    assert_eq!(
+        from_str::<HashMap<String, u32>>(r#"{ foo\nbar: 42 }"#),
+        Err(err_at(0, 6, InvalidEscapeSequence))
+    );
+    assert_eq!(
+        from_str::<HashMap<String, u32>>(r#"{ \u4f60\u597d\u0021: 42 }"#),
+        Err(err_at(0, 14, ExpectedIdentifier))
+    );
+    assert_eq!(
+        from_str::<HashMap<String, u32>>(r#"{ 123: 42 }"#),
+        Err(err_at(0, 2, ExpectedIdentifier))
+    );
+    assert_eq!(
+        from_str::<Person>("{ name 'Joe', age 27 }"),
+        Err(err_at(0, 7, ErrorCode::ExpectedColon))
+    );
+    assert_eq!(
+        from_str::<Person>("{ name: 'Joe' age: 27 }"),
+        Err(err_at(0, 14, ErrorCode::ExpectedComma))
+    );
+    assert_eq!(
+        from_str::<Person>("{ name: 'Joe', age: 27"),
+        Err(err(ErrorCode::EofParsingObject))
+    );
+    assert_eq!(
+        from_str::<Person>("[ name: 'Joe', age: 27 ]"),
+        Err(err_at(0, 0, ErrorCode::ExpectedOpeningBrace))
+    );
 }
 
 #[test]

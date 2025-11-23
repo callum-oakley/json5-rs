@@ -1,6 +1,7 @@
 use std::{
     fmt::Display,
     iter::Peekable,
+    ops::Deref,
     str::{CharIndices, FromStr},
 };
 
@@ -306,7 +307,7 @@ impl<'de> Deserializer<'de> {
 
     // https://262.ecma-international.org/5.1/#sec-7.8.4
     fn parse_escape_sequence(&mut self) -> Result<Option<char>> {
-        let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
+        let (offset, c) = self.next_or(ErrorCode::EofParsingEscapeSequence)?;
         match c {
             // LineTerminatorSequence
             _ if is_json5_line_terminator(c) => {
@@ -346,7 +347,7 @@ impl<'de> Deserializer<'de> {
     fn parse_hex_escape_sequence(&mut self, length: usize) -> Result<char> {
         let mut value = 0;
         for _ in 0..length {
-            let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
+            let (offset, c) = self.next_or(ErrorCode::EofParsingEscapeSequence)?;
             if !c.is_ascii_hexdigit() {
                 return Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence));
             }
@@ -368,19 +369,13 @@ impl<'de> Deserializer<'de> {
     // https://262.ecma-international.org/5.1/#sec-7.6
     fn parse_identifier(&mut self) -> Result<StringResult<'de>> {
         let mut owned = None;
-        let (start, c) = self.peek_or(ErrorCode::EofParsingIdentifier)?;
-        if !is_json5_identifier_start(c) {
-            return Err(self.err_at(start, ErrorCode::ExpectedIdentifier));
-        }
-        let mut offset = start;
+        let (start, _) = self.peek_or(ErrorCode::EofParsingIdentifier)?;
 
-        while let (o, c) = self.peek_or(ErrorCode::EofParsingIdentifier)?
-            && is_json5_identifier(c)
-        {
-            self.next();
-            offset = o;
+        loop {
+            let (offset, c) = self.peek_or(ErrorCode::EofParsingIdentifier)?;
 
             if c == '\\' {
+                self.next();
                 let owned = owned.get_or_insert(self.input[start..offset].to_owned());
                 self.expect_char(
                     'u',
@@ -388,19 +383,32 @@ impl<'de> Deserializer<'de> {
                     ErrorCode::InvalidEscapeSequence,
                 )?;
                 let c = self.parse_hex_escape_sequence(4)?;
-                if owned.is_empty() && !is_json5_identifier_start(c) || !is_json5_identifier(c) {
-                    return Err(self.err_at(start, ErrorCode::ExpectedIdentifier));
+                if offset == start {
+                    if !is_json5_identifier_start(c) {
+                        return Err(self.err_at(offset, ErrorCode::ExpectedIdentifier));
+                    }
+                } else if !is_json5_identifier(c) {
+                    return Err(self.err_at(offset, ErrorCode::ExpectedIdentifier));
                 }
                 owned.push(c);
-            } else if let Some(owned) = &mut owned {
+                continue;
+            }
+
+            if offset == start {
+                if !is_json5_identifier_start(c) {
+                    return Err(self.err_at(offset, ErrorCode::ExpectedIdentifier));
+                }
+            } else if !is_json5_identifier(c) {
+                return Ok(match owned {
+                    Some(owned) => StringResult::Owned(owned),
+                    None => StringResult::Borrowed(&self.input[start..offset]),
+                });
+            }
+
+            self.next();
+            if let Some(owned) = &mut owned {
                 owned.push(c);
             }
-        }
-
-        if let Some(owned) = owned {
-            Ok(StringResult::Owned(owned))
-        } else {
-            Ok(StringResult::Borrowed(&self.input[start..=offset]))
         }
     }
 
@@ -431,6 +439,19 @@ macro_rules! deserialize_string {
             match self.parse_string()? {
                 StringResult::Borrowed(borrowed) => visitor.visit_borrowed_str(borrowed),
                 StringResult::Owned(owned) => visitor.visit_string(owned),
+            }
+        }
+    };
+}
+
+macro_rules! deserialize_bytes {
+    ($method:ident) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+            match self.parse_string()? {
+                StringResult::Borrowed(borrowed) => {
+                    visitor.visit_borrowed_bytes(borrowed.as_bytes())
+                }
+                StringResult::Owned(owned) => visitor.visit_byte_buf(owned.into()),
             }
         }
     };
@@ -488,6 +509,9 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     deserialize_string!(deserialize_string);
     deserialize_string!(deserialize_char);
     deserialize_string!(deserialize_identifier);
+
+    deserialize_bytes!(deserialize_bytes);
+    deserialize_bytes!(deserialize_byte_buf);
 
     deserialize_collection!(
         deserialize_seq,
@@ -559,11 +583,10 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
 
     fn deserialize_struct<V: Visitor<'de>>(
         self,
-        name: &'static str,
-        fields: &'static [&'static str],
+        _: &'static str,
+        _: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value> {
-        // TODO also deserialize from an array
         self.deserialize_map(visitor)
     }
 
@@ -573,14 +596,6 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
         variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value> {
-        todo!()
-    }
-
-    fn deserialize_bytes<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        todo!()
-    }
-
-    fn deserialize_byte_buf<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         todo!()
     }
 
@@ -680,29 +695,116 @@ struct MapKey<'a, 'de: 'a> {
     de: &'a mut Deserializer<'de>,
 }
 
+macro_rules! deserialize_key_from_str {
+    ($method:ident, $visit:ident) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+            visitor.$visit(from_str(&self.de.parse_key()?)?)
+        }
+    };
+}
+
+macro_rules! deserialize_string_key {
+    ($method:ident) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+            match self.de.parse_key()? {
+                StringResult::Borrowed(borrowed) => visitor.visit_borrowed_str(borrowed),
+                StringResult::Owned(owned) => visitor.visit_string(owned),
+            }
+        }
+    };
+}
+
+macro_rules! deserialize_bytes_key {
+    ($method:ident) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+            match self.de.parse_key()? {
+                StringResult::Borrowed(borrowed) => {
+                    visitor.visit_borrowed_bytes(borrowed.as_bytes())
+                }
+                StringResult::Owned(owned) => visitor.visit_byte_buf(owned.into()),
+            }
+        }
+    };
+}
+
 impl<'de> serde::de::Deserializer<'de> for MapKey<'_, 'de> {
     type Error = Error;
 
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: Visitor<'de>,
-    {
-        match self.de.parse_key()? {
-            StringResult::Borrowed(borrowed) => visitor.visit_borrowed_str(borrowed),
-            StringResult::Owned(owned) => visitor.visit_string(owned),
-        }
+    deserialize_key_from_str!(deserialize_bool, visit_bool);
+    deserialize_key_from_str!(deserialize_u8, visit_u8);
+    deserialize_key_from_str!(deserialize_u16, visit_u16);
+    deserialize_key_from_str!(deserialize_u32, visit_u32);
+    deserialize_key_from_str!(deserialize_u64, visit_u64);
+    deserialize_key_from_str!(deserialize_i8, visit_i8);
+    deserialize_key_from_str!(deserialize_i16, visit_i16);
+    deserialize_key_from_str!(deserialize_i32, visit_i32);
+    deserialize_key_from_str!(deserialize_i64, visit_i64);
+    deserialize_key_from_str!(deserialize_f32, visit_f32);
+    deserialize_key_from_str!(deserialize_f64, visit_f64);
+
+    deserialize_string_key!(deserialize_any);
+    deserialize_string_key!(deserialize_ignored_any);
+    deserialize_string_key!(deserialize_str);
+    deserialize_string_key!(deserialize_string);
+    deserialize_string_key!(deserialize_char);
+    deserialize_string_key!(deserialize_identifier);
+
+    deserialize_bytes_key!(deserialize_bytes);
+    deserialize_bytes_key!(deserialize_byte_buf);
+
+    fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        from_str::<()>(&self.de.parse_key()?)?;
+        visitor.visit_unit()
     }
 
-    forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes byte_buf option
-        unit unit_struct newtype_struct seq tuple tuple_struct map struct enum identifier
-        ignored_any
+    fn deserialize_unit_struct<V: Visitor<'de>>(
+        self,
+        _: &'static str,
+        visitor: V,
+    ) -> Result<V::Value> {
+        self.deserialize_unit(visitor)
     }
+
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
+        // Consider keys to always be Some, otherwise we don't know if "null" is None or
+        // Some("null").
+        visitor.visit_some(self)
+    }
+
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
+        self,
+        _: &'static str,
+        visitor: V,
+    ) -> Result<V::Value> {
+        visitor.visit_newtype_struct(self)
+    }
+
+    fn deserialize_enum<V: Visitor<'de>>(
+        self,
+        name: &'static str,
+        variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value> {
+        todo!()
+    }
+
+    forward_to_deserialize_any! { seq tuple tuple_struct map struct }
 }
 
 enum StringResult<'de> {
     Borrowed(&'de str),
     Owned(String),
+}
+
+impl Deref for StringResult<'_> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            StringResult::Borrowed(borrowed) => borrowed,
+            StringResult::Owned(owned) => owned,
+        }
+    }
 }
 
 enum NumberResult {

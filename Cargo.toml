@@ -14,4 +14,5 @@ serde = "1"
 ucd-trie = "0.1.7"
 
 [dev-dependencies]
+serde_bytes = "0.11.19"
 serde_derive = "1"
