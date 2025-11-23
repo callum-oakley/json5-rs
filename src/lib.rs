@@ -4,5 +4,10 @@
 mod de;
 mod error;
 
-pub use de::*;
-pub use error::*;
+#[allow(clippy::all, clippy::pedantic, dead_code)]
+mod unicode;
+
+pub use {
+    de::{Deserializer, from_str},
+    error::{Error, ErrorCode, Position},
+};

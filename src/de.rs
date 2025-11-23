@@ -6,7 +6,14 @@ use std::{
 
 use serde::{Deserialize, de::Visitor, forward_to_deserialize_any};
 
-use crate::{Error, ErrorCode, Position, Result};
+use crate::{
+    error::{Error, ErrorCode, Position, Result},
+    unicode::{
+        CONNECTOR_PUNCTUATION, DECIMAL_NUMBER, LETTER_NUMBER, LOWERCASE_LETTER, MODIFIER_LETTER,
+        NONSPACING_MARK, OTHER_LETTER, SPACE_SEPARATOR, SPACING_MARK, TITLECASE_LETTER,
+        UPPERCASE_LETTER,
+    },
+};
 
 pub fn from_str<'de, T: Deserialize<'de>>(input: &'de str) -> Result<T> {
     let mut deserializer = Deserializer::from_str(input);
@@ -73,7 +80,7 @@ impl<'de> Deserializer<'de> {
     fn skip_whitespace(&mut self) -> Result<()> {
         while let Some((_, c)) = self.peek() {
             match c {
-                json5_whitespace!() => {
+                _ if is_json5_whitespace(c) => {
                     self.next();
                 }
                 '/' => {
@@ -94,7 +101,7 @@ impl<'de> Deserializer<'de> {
         match c {
             '/' => {
                 while let Some((_, c)) = self.next() {
-                    if matches!(c, json5_line_terminator!()) {
+                    if is_json5_line_terminator(c) {
                         break;
                     }
                 }
@@ -302,7 +309,7 @@ impl<'de> Deserializer<'de> {
         let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
         match c {
             // LineTerminatorSequence
-            json5_line_terminator!() => {
+            _ if is_json5_line_terminator(c) => {
                 if c == '\u{000D}' && self.peek().is_some_and(|(_, c)| c == '\u{000A}') {
                     self.next();
                 }
@@ -360,9 +367,41 @@ impl<'de> Deserializer<'de> {
 
     // https://262.ecma-international.org/5.1/#sec-7.6
     fn parse_identifier(&mut self) -> Result<StringResult<'de>> {
-        // We only call this from parse_key, so no need to skip_whitespace
-        let (offset, c) = self.next_or(ErrorCode::EofParsingObject)?;
-        todo!()
+        let mut owned = None;
+        let (start, c) = self.peek_or(ErrorCode::EofParsingIdentifier)?;
+        if !is_json5_identifier_start(c) {
+            return Err(self.err_at(start, ErrorCode::ExpectedIdentifier));
+        }
+        let mut offset = start;
+
+        while let (o, c) = self.peek_or(ErrorCode::EofParsingIdentifier)?
+            && is_json5_identifier(c)
+        {
+            self.next();
+            offset = o;
+
+            if c == '\\' {
+                let owned = owned.get_or_insert(self.input[start..offset].to_owned());
+                self.expect_char(
+                    'u',
+                    ErrorCode::EofParsingIdentifier,
+                    ErrorCode::InvalidEscapeSequence,
+                )?;
+                let c = self.parse_hex_escape_sequence(4)?;
+                if owned.is_empty() && !is_json5_identifier_start(c) || !is_json5_identifier(c) {
+                    return Err(self.err_at(start, ErrorCode::ExpectedIdentifier));
+                }
+                owned.push(c);
+            } else if let Some(owned) = &mut owned {
+                owned.push(c);
+            }
+        }
+
+        if let Some(owned) = owned {
+            Ok(StringResult::Owned(owned))
+        } else {
+            Ok(StringResult::Borrowed(&self.input[start..=offset]))
+        }
     }
 
     fn err_at(&self, offset: usize, code: ErrorCode) -> Error {
@@ -524,7 +563,8 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
         fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value> {
-        todo!()
+        // TODO also deserialize from an array
+        self.deserialize_map(visitor)
     }
 
     fn deserialize_enum<V: Visitor<'de>>(
@@ -671,54 +711,38 @@ enum NumberResult {
     F64(f64),
 }
 
-// We have to be careful here because the JSON5 definition of whitespace doesn't quite align with
-// `char::is_whitespace`.
+// This is NOT the same as char::is_whitespace.
 //
-// https://spec.json5.org/#white-space lists
-// U+0009	Horizontal tab
-// U+000A	Line feed
-// U+000B	Vertical tab
-// U+000C	Form feed
-// U+000D	Carriage return
-// U+0020	Space
-// U+00A0	Non-breaking space
-// U+2028	Line separator
-// U+2029	Paragraph separator
-// U+FEFF	Byte order mark
-// Unicode Zs category	Any other character in the Space Separator Unicode category
-//
-// https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedGeneralCategory.txt lists
-// 0020          ; Zs #       SPACE
-// 00A0          ; Zs #       NO-BREAK SPACE
-// 1680          ; Zs #       OGHAM SPACE MARK
-// 2000..200A    ; Zs #  [11] EN QUAD..HAIR SPACE
-// 202F          ; Zs #       NARROW NO-BREAK SPACE
-// 205F          ; Zs #       MEDIUM MATHEMATICAL SPACE
-// 3000          ; Zs #       IDEOGRAPHIC SPACE
-macro_rules! json5_whitespace {
-    () => {
-        '\u{0009}'..='\u{000D}' | // Horizontal tab..Carriage return
-        '\u{0020}' |              // Space
-        '\u{00A0}' |              // Non-breaking space
-        '\u{2028}' |              // Line separator
-        '\u{2029}' |              // Paragraph separator
-        '\u{FEFF}' |              // Byte order mark
-        '\u{1680}' |              // OGHAM SPACE MARK
-        '\u{2000}'..='\u{200A}' | // EN QUAD..HAIR SPACE
-        '\u{202F}' |              // NARROW NO-BREAK SPACE
-        '\u{205F}' |              // MEDIUM MATHEMATICAL SPACE
-        '\u{3000}'                // IDEOGRAPHIC SPACE
-    }
+// https://spec.json5.org/#white-space
+fn is_json5_whitespace(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0009}'..='\u{000D}' | '\u{0020}' | '\u{00A0}' | '\u{2028}' | '\u{2029}' | '\u{FEFF}'
+    ) || SPACE_SEPARATOR.contains_char(c)
 }
-use json5_whitespace;
 
 // https://262.ecma-international.org/5.1/#sec-7.3
-macro_rules! json5_line_terminator {
-    () => {
-        '\u{000A}' | // Line Feed
-        '\u{000D}' | // Carriage Return
-        '\u{2028}' | // Line separator
-        '\u{2029}'   // Paragraph separator
-    }
+pub fn is_json5_line_terminator(c: char) -> bool {
+    matches!(c, '\u{000A}' | '\u{000D}' | '\u{2028}' | '\u{2029}')
 }
-use json5_line_terminator;
+
+// https://262.ecma-international.org/5.1/#sec-7.6
+fn is_json5_identifier_start(c: char) -> bool {
+    matches!(c, '\\' | '$' | '_')
+        || UPPERCASE_LETTER.contains_char(c)
+        || LOWERCASE_LETTER.contains_char(c)
+        || TITLECASE_LETTER.contains_char(c)
+        || MODIFIER_LETTER.contains_char(c)
+        || OTHER_LETTER.contains_char(c)
+        || LETTER_NUMBER.contains_char(c)
+}
+
+// https://262.ecma-international.org/5.1/#sec-7.6
+fn is_json5_identifier(c: char) -> bool {
+    is_json5_identifier_start(c)
+        || matches!(c, '\u{200C}' | '\u{200D}')
+        || NONSPACING_MARK.contains_char(c)
+        || SPACING_MARK.contains_char(c)
+        || DECIMAL_NUMBER.contains_char(c)
+        || CONNECTOR_PUNCTUATION.contains_char(c)
+}

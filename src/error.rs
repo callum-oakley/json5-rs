@@ -24,6 +24,7 @@ pub enum ErrorCode {
     EofParsingArray,
     EofParsingBool,
     EofParsingComment,
+    EofParsingIdentifier,
     EofParsingNull,
     EofParsingNumber,
     EofParsingObject,
@@ -36,6 +37,7 @@ pub enum ErrorCode {
     ExpectedColon,
     ExpectedComma,
     ExpectedComment,
+    ExpectedIdentifier,
     ExpectedNull,
     ExpectedNumber,
     ExpectedOpeningBrace,
@@ -56,6 +58,7 @@ impl Display for ErrorCode {
             ErrorCode::EofParsingArray => write!(f, "EOF parsing array"),
             ErrorCode::EofParsingBool => write!(f, "EOF parsing bool"),
             ErrorCode::EofParsingComment => write!(f, "EOF parsing comment"),
+            ErrorCode::EofParsingIdentifier => write!(f, "EOF parsing identifier"),
             ErrorCode::EofParsingNull => write!(f, "EOF parsing null"),
             ErrorCode::EofParsingNumber => write!(f, "EOF parsing number"),
             ErrorCode::EofParsingObject => write!(f, "EOF parsing object"),
@@ -68,6 +71,7 @@ impl Display for ErrorCode {
             ErrorCode::ExpectedColon => write!(f, "expected colon"),
             ErrorCode::ExpectedComma => write!(f, "expected comma"),
             ErrorCode::ExpectedComment => write!(f, "expected comment"),
+            ErrorCode::ExpectedIdentifier => write!(f, "expected identifier"),
             ErrorCode::ExpectedNull => write!(f, "expected null"),
             ErrorCode::ExpectedNumber => write!(f, "expected number"),
             ErrorCode::ExpectedOpeningBrace => write!(f, "expected opening brace"),
@@ -162,22 +166,22 @@ pub struct Position {
 }
 
 impl Position {
+    #[must_use]
     pub fn from_offset(offset: usize, input: &str) -> Self {
         let mut res = Self { line: 0, column: 0 };
         let mut chars = input[..offset].chars().peekable();
         while let Some(c) = chars.next() {
-            match c {
-                json5_line_terminator!() => {
-                    // "The character sequence <CR><LF> is commonly used as a line terminator. It
-                    // should be considered a single character for the purpose of reporting line
-                    // numbers." – https://262.ecma-international.org/5.1/#sec-7.3
-                    if c == '\u{000D}' && chars.peek() == Some(&'\u{000A}') {
-                        chars.next();
-                    }
-                    res.line += 1;
-                    res.column = 0;
+            if crate::de::is_json5_line_terminator(c) {
+                // "The character sequence <CR><LF> is commonly used as a line terminator. It
+                // should be considered a single character for the purpose of reporting line
+                // numbers." – https://262.ecma-international.org/5.1/#sec-7.3
+                if c == '\u{000D}' && chars.peek() == Some(&'\u{000A}') {
+                    chars.next();
                 }
-                _ => res.column += 1,
+                res.line += 1;
+                res.column = 0;
+            } else {
+                res.column += 1;
             }
         }
         res

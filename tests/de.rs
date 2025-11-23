@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use json5::{Error, ErrorCode, Position, from_str};
 
 use ErrorCode::*;
@@ -166,6 +168,7 @@ fn parse_string() {
     );
 }
 
+// https://spec.json5.org/#arrays
 #[test]
 fn parse_array() {
     #[derive(Debug, PartialEq, Deserialize)]
@@ -210,11 +213,99 @@ fn parse_array() {
         from_str::<Vec<i32>>("[ , ]"),
         Err(err_at(0, 2, ExpectedNumber))
     );
+
+    // TODO structs from arrays
 }
 
+// https://spec.json5.org/#objects
 #[test]
 fn parse_object() {
-    // TODO
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct Example<'a> {
+        #[serde(borrow)]
+        image: Image<'a>,
+    }
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    #[serde(rename_all = "kebab-case")]
+    struct Image<'a> {
+        width: usize,
+        height: usize,
+        aspect_ratio: &'a str,
+    }
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct Person {
+        name: String,
+        age: u32,
+    }
+
+    assert_eq!(
+        from_str::<HashMap<&str, usize>>(
+            "
+            // An empty object
+            {}
+            "
+        ),
+        Ok(HashMap::new())
+    );
+    assert_eq!(
+        from_str(
+            "
+            // An object with two properties
+            // and a trailing comma
+            {
+                width: 1920,
+                height: 1080,
+            }
+            "
+        ),
+        Ok(HashMap::from([("width", 1920), ("height", 1080)]))
+    );
+    assert_eq!(
+        from_str(
+            "
+            // Objects can be nested
+            {
+                image: {
+                    width: 1920,
+                    height: 1080,
+                    'aspect-ratio': '16:9',
+                }
+            }
+            "
+        ),
+        Ok(Example {
+            image: Image {
+                width: 1920,
+                height: 1080,
+                aspect_ratio: "16:9",
+            }
+        })
+    );
+    assert_eq!(
+        from_str(
+            "
+            // An array of objects
+            [
+                { name: 'Joe', age: 27 },
+                { name: 'Jane', age: 32 },
+            ]
+            "
+        ),
+        Ok(vec![
+            Person {
+                name: "Joe".to_owned(),
+                age: 27
+            },
+            Person {
+                name: "Jane".to_owned(),
+                age: 32
+            }
+        ])
+    );
+
+    // TODO identifiers with escapes, non-string keys, errors
 }
 
 #[test]
@@ -222,6 +313,8 @@ fn deserialize_option() {
     assert_eq!(from_str::<Option<bool>>("null"), Ok(None));
     assert_eq!(from_str::<Option<bool>>("true"), Ok(Some(true)));
 }
+
+// TODO bytes from strings and arrays
 
 #[test]
 fn comments() {
