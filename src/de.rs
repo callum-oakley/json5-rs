@@ -62,19 +62,54 @@ impl<'de> Deserializer<'de> {
         self.peek().ok_or_else(|| Error::new(eof))
     }
 
-    fn expect_char(&mut self, expected: char, eof: ErrorCode, unexpected: ErrorCode) -> Result<()> {
+    fn expect_char(
+        &mut self,
+        expected: char,
+        eof: ErrorCode,
+        unexpected: ErrorCode,
+    ) -> Result<usize> {
         let (offset, c) = self.next_or(eof)?;
         if c != expected {
             return Err(self.err_at(offset, unexpected));
         }
-        Ok(())
+        Ok(offset)
     }
 
-    fn expect_str(&mut self, expected: &str, eof: ErrorCode, unexpected: ErrorCode) -> Result<()> {
-        for e in expected.chars() {
+    fn expect_str(
+        &mut self,
+        expected: &str,
+        eof: ErrorCode,
+        unexpected: ErrorCode,
+    ) -> Result<usize> {
+        let mut chars = expected.chars();
+        let offset = self.expect_char(
+            chars.next().expect("expecting at least one character"),
+            eof,
+            unexpected,
+        )?;
+        for e in chars {
             self.expect_char(e, eof, unexpected)?;
         }
-        Ok(())
+        Ok(offset)
+    }
+
+    fn expect_collection_end(
+        &mut self,
+        close: char,
+        eof: ErrorCode,
+        unexpected: ErrorCode,
+    ) -> Result<()> {
+        self.skip_whitespace()?;
+        let (offset, c) = self.next_or(eof)?;
+        match c {
+            c if c == close => Ok(()),
+            ',' => {
+                self.skip_whitespace()?;
+                self.expect_char(close, eof, unexpected)?;
+                Ok(())
+            }
+            _ => Err(self.err_at(offset, unexpected)),
+        }
     }
 
     // https://spec.json5.org/#white-space
@@ -122,30 +157,31 @@ impl<'de> Deserializer<'de> {
         Ok(())
     }
 
-    fn parse_null(&mut self) -> Result<()> {
+    fn parse_null(&mut self) -> Result<usize> {
         self.skip_whitespace()?;
-
-        self.expect_str("null", ErrorCode::EofParsingNull, ErrorCode::ExpectedNull)
+        let (offset, _) = self.peek_or(ErrorCode::EofParsingNull)?;
+        self.expect_str("null", ErrorCode::EofParsingNull, ErrorCode::ExpectedNull)?;
+        Ok(offset)
     }
 
-    fn parse_bool(&mut self) -> Result<bool> {
+    fn parse_bool(&mut self) -> Result<(usize, bool)> {
         self.skip_whitespace()?;
 
         match self.next_or(ErrorCode::EofParsingBool)? {
-            (_, 't') => {
+            (offset, 't') => {
                 self.expect_str("rue", ErrorCode::EofParsingBool, ErrorCode::ExpectedBool)?;
-                Ok(true)
+                Ok((offset, true))
             }
-            (_, 'f') => {
+            (offset, 'f') => {
                 self.expect_str("alse", ErrorCode::EofParsingBool, ErrorCode::ExpectedBool)?;
-                Ok(false)
+                Ok((offset, false))
             }
             (offset, _) => Err(self.err_at(offset, ErrorCode::ExpectedBool)),
         }
     }
 
     // https://spec.json5.org/#numbers
-    fn parse_number(&mut self) -> Result<NumberResult> {
+    fn parse_number(&mut self) -> Result<(usize, NumberResult)> {
         self.skip_whitespace()?;
 
         let (start, _) = self.peek_or(ErrorCode::EofParsingNumber)?;
@@ -170,29 +206,33 @@ impl<'de> Deserializer<'de> {
                     ErrorCode::ExpectedNumber,
                 )?;
                 if neg {
-                    Ok(NumberResult::F64(-f64::INFINITY))
+                    Ok((start, NumberResult::F64(-f64::INFINITY)))
                 } else {
-                    Ok(NumberResult::F64(f64::INFINITY))
+                    Ok((start, NumberResult::F64(f64::INFINITY)))
                 }
             }
             (_, 'N') => {
                 self.expect_str("aN", ErrorCode::EofParsingNumber, ErrorCode::ExpectedNumber)?;
                 if neg {
-                    Ok(NumberResult::F64(-f64::NAN))
+                    Ok((start, NumberResult::F64(-f64::NAN)))
                 } else {
-                    Ok(NumberResult::F64(f64::NAN))
+                    Ok((start, NumberResult::F64(f64::NAN)))
                 }
             }
             (_, '0') => match self.peek() {
                 Some((_, 'x' | 'X')) => {
                     self.next();
-                    self.parse_hex_number(neg, start)
+                    self.parse_hex_number(neg, start).map(|n| (start, n))
                 }
-                Some((offset, '.' | 'e' | 'E')) => self.parse_decimal_number(neg, start, offset),
+                Some((offset, '.' | 'e' | 'E')) => self
+                    .parse_decimal_number(neg, start, offset)
+                    .map(|n| (start, n)),
                 Some((_, '0'..='9')) => Err(self.err_at(start, ErrorCode::LeadingZero)),
-                _ => Ok(NumberResult::U64(0)),
+                _ => Ok((start, NumberResult::U64(0))),
             },
-            (offset, '.' | '1'..='9') => self.parse_decimal_number(neg, start, offset),
+            (offset, '.' | '1'..='9') => self
+                .parse_decimal_number(neg, start, offset)
+                .map(|n| (start, n)),
             (offset, _) => Err(self.err_at(offset, ErrorCode::ExpectedNumber)),
         }
     }
@@ -268,12 +308,12 @@ impl<'de> Deserializer<'de> {
     }
 
     // https://spec.json5.org/#strings
-    fn parse_string(&mut self) -> Result<StringResult<'de>> {
+    fn parse_string(&mut self) -> Result<(usize, StringResult<'de>)> {
         self.skip_whitespace()?;
 
         let (offset, c) = self.next_or(ErrorCode::EofParsingString)?;
         if c == '"' || c == '\'' {
-            self.parse_string_characters(c)
+            self.parse_string_characters(c).map(|s| (offset, s))
         } else {
             Err(self.err_at(offset, ErrorCode::ExpectedString))
         }
@@ -357,12 +397,12 @@ impl<'de> Deserializer<'de> {
     }
 
     // https://spec.json5.org/#objects
-    fn parse_key(&mut self) -> Result<StringResult<'de>> {
+    fn parse_key(&mut self) -> Result<(usize, StringResult<'de>)> {
         self.skip_whitespace()?;
 
         match self.peek_or(ErrorCode::EofParsingObject)? {
             (_, '"' | '\'') => self.parse_string(),
-            _ => self.parse_identifier(),
+            (offset, _) => self.parse_identifier().map(|i| (offset, i)),
         }
     }
 
@@ -419,16 +459,22 @@ impl<'de> Deserializer<'de> {
     fn custom_err_at<T: Display>(&self, offset: usize, msg: T) -> Error {
         Error::custom_at(Position::from_offset(offset, self.input), msg)
     }
+
+    fn with_position(&self, err: Error, offset: usize) -> Error {
+        err.with_position(Position::from_offset(offset, self.input))
+    }
 }
 
 macro_rules! deserialize_number {
     ($method:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-            match self.parse_number()? {
+            let (offset, number) = self.parse_number()?;
+            match number {
                 NumberResult::U64(u) => visitor.visit_u64(u),
                 NumberResult::I64(i) => visitor.visit_i64(i),
                 NumberResult::F64(f) => visitor.visit_f64(f),
             }
+            .map_err(|err| self.with_position(err, offset))
         }
     };
 }
@@ -436,10 +482,12 @@ macro_rules! deserialize_number {
 macro_rules! deserialize_string {
     ($method:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-            match self.parse_string()? {
+            let (offset, s) = self.parse_string()?;
+            match s {
                 StringResult::Borrowed(borrowed) => visitor.visit_borrowed_str(borrowed),
                 StringResult::Owned(owned) => visitor.visit_string(owned),
             }
+            .map_err(|err| self.with_position(err, offset))
         }
     };
 }
@@ -447,12 +495,14 @@ macro_rules! deserialize_string {
 macro_rules! deserialize_bytes {
     ($method:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-            match self.parse_string()? {
+            let (offset, s) = self.parse_string()?;
+            match s {
                 StringResult::Borrowed(borrowed) => {
                     visitor.visit_borrowed_bytes(borrowed.as_bytes())
                 }
                 StringResult::Owned(owned) => visitor.visit_byte_buf(owned.into()),
             }
+            .map_err(|err| self.with_position(err, offset))
         }
     };
 }
@@ -470,23 +520,15 @@ macro_rules! deserialize_collection {
     ) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
             self.skip_whitespace()?;
-            self.expect_char($open, $eof, $expected_opening)?;
-            let value = visitor.$visit($access {
-                de: self,
-                first: true,
-            })?;
-
-            self.skip_whitespace()?;
-            let (offset, c) = self.next_or($eof)?;
-            match c {
-                $close => Ok(value),
-                ',' => {
-                    self.skip_whitespace()?;
-                    self.expect_char($close, $eof, $expected_closing)?;
-                    Ok(value)
-                }
-                _ => Err(self.err_at(offset, $expected_closing)),
-            }
+            let offset = self.expect_char($open, $eof, $expected_opening)?;
+            let value = visitor
+                .$visit($access {
+                    de: self,
+                    first: true,
+                })
+                .map_err(|err| self.with_position(err, offset))?;
+            self.expect_collection_end($close, $eof, $expected_closing)?;
+            Ok(value)
         }
     };
 }
@@ -535,21 +577,29 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     );
 
     fn deserialize_bool<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        visitor.visit_bool(self.parse_bool()?)
+        let (offset, b) = self.parse_bool()?;
+        visitor
+            .visit_bool(b)
+            .map_err(|err| self.with_position(err, offset))
     }
 
     fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        if self.peek().is_some_and(|(_, c)| c == 'n') {
+        self.skip_whitespace()?;
+        let (offset, c) = self.peek_or(ErrorCode::EofParsingValue)?;
+        if c == 'n' {
             self.parse_null()?;
             visitor.visit_none()
         } else {
-            visitor.visit_some(self)
+            visitor.visit_some(&mut *self)
         }
+        .map_err(|err| self.with_position(err, offset))
     }
 
     fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        self.parse_null()?;
-        visitor.visit_unit()
+        let offset = self.parse_null()?;
+        visitor
+            .visit_unit()
+            .map_err(|err| self.with_position(err, offset))
     }
 
     fn deserialize_unit_struct<V: Visitor<'de>>(
@@ -592,11 +642,32 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
 
     fn deserialize_enum<V: Visitor<'de>>(
         self,
-        name: &'static str,
-        variants: &'static [&'static str],
+        _: &'static str,
+        _: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value> {
-        todo!()
+        self.skip_whitespace()?;
+        match self.peek_or(ErrorCode::EofParsingValue)? {
+            (offset, '{') => {
+                self.next();
+                let value = visitor
+                    .visit_enum(VariantAccess { de: self })
+                    .map_err(|err| self.with_position(err, offset))?;
+                self.expect_collection_end(
+                    '}',
+                    ErrorCode::EofParsingObject,
+                    ErrorCode::ExpectedClosingBrace,
+                )?;
+                Ok(value)
+            }
+            (offset, '"' | '\'') => visitor
+                .visit_enum(UnitVariantAccess {
+                    de: self,
+                    map_key: false,
+                })
+                .map_err(|err| self.with_position(err, offset)),
+            (c, _) => Err(self.err_at(c, ErrorCode::ExpectedStringOrObject)),
+        }
     }
 
     fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
@@ -698,7 +769,10 @@ struct MapKey<'a, 'de: 'a> {
 macro_rules! deserialize_key_from_str {
     ($method:ident, $visit:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-            visitor.$visit(from_str(&self.de.parse_key()?)?)
+            let (offset, key) = self.de.parse_key()?;
+            visitor
+                .$visit(from_str(&key)?)
+                .map_err(|err| self.de.with_position(err, offset))
         }
     };
 }
@@ -706,10 +780,12 @@ macro_rules! deserialize_key_from_str {
 macro_rules! deserialize_string_key {
     ($method:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-            match self.de.parse_key()? {
+            let (offset, key) = self.de.parse_key()?;
+            match key {
                 StringResult::Borrowed(borrowed) => visitor.visit_borrowed_str(borrowed),
                 StringResult::Owned(owned) => visitor.visit_string(owned),
             }
+            .map_err(|err| self.de.with_position(err, offset))
         }
     };
 }
@@ -717,12 +793,14 @@ macro_rules! deserialize_string_key {
 macro_rules! deserialize_bytes_key {
     ($method:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-            match self.de.parse_key()? {
+            let (offset, key) = self.de.parse_key()?;
+            match key {
                 StringResult::Borrowed(borrowed) => {
                     visitor.visit_borrowed_bytes(borrowed.as_bytes())
                 }
                 StringResult::Owned(owned) => visitor.visit_byte_buf(owned.into()),
             }
+            .map_err(|err| self.de.with_position(err, offset))
         }
     };
 }
@@ -753,8 +831,11 @@ impl<'de> serde::de::Deserializer<'de> for MapKey<'_, 'de> {
     deserialize_bytes_key!(deserialize_byte_buf);
 
     fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        from_str::<()>(&self.de.parse_key()?)?;
-        visitor.visit_unit()
+        let (offset, key) = self.de.parse_key()?;
+        from_str::<()>(&key)?;
+        visitor
+            .visit_unit()
+            .map_err(|err| self.de.with_position(err, offset))
     }
 
     fn deserialize_unit_struct<V: Visitor<'de>>(
@@ -781,14 +862,125 @@ impl<'de> serde::de::Deserializer<'de> for MapKey<'_, 'de> {
 
     fn deserialize_enum<V: Visitor<'de>>(
         self,
-        name: &'static str,
-        variants: &'static [&'static str],
+        _: &'static str,
+        _: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value> {
-        todo!()
+        let (offset, _) = self.de.peek_or(ErrorCode::EofParsingObject)?;
+        visitor
+            .visit_enum(UnitVariantAccess {
+                de: self.de,
+                map_key: true,
+            })
+            .map_err(|err| self.de.with_position(err, offset))
     }
 
     forward_to_deserialize_any! { seq tuple tuple_struct map struct }
+}
+
+struct VariantAccess<'a, 'de: 'a> {
+    de: &'a mut Deserializer<'de>,
+}
+
+impl<'de> serde::de::EnumAccess<'de> for VariantAccess<'_, 'de> {
+    type Error = Error;
+
+    type Variant = Self;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
+    where
+        V: serde::de::DeserializeSeed<'de>,
+    {
+        let variant = seed.deserialize(MapKey { de: &mut *self.de })?;
+        self.de.skip_whitespace()?;
+        self.de
+            .expect_char(':', ErrorCode::EofParsingObject, ErrorCode::ExpectedColon)?;
+        Ok((variant, self))
+    }
+}
+
+impl<'de> serde::de::VariantAccess<'de> for VariantAccess<'_, 'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<()> {
+        serde::de::Deserialize::deserialize(self.de)
+    }
+
+    fn newtype_variant_seed<T: serde::de::DeserializeSeed<'de>>(self, seed: T) -> Result<T::Value> {
+        seed.deserialize(self.de)
+    }
+
+    fn tuple_variant<V: Visitor<'de>>(self, _: usize, visitor: V) -> Result<V::Value> {
+        serde::de::Deserializer::deserialize_seq(self.de, visitor)
+    }
+
+    fn struct_variant<V: Visitor<'de>>(
+        self,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value> {
+        serde::de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
+    }
+}
+
+struct UnitVariantAccess<'a, 'de: 'a> {
+    de: &'a mut Deserializer<'de>,
+    map_key: bool,
+}
+
+impl<'de> serde::de::EnumAccess<'de> for UnitVariantAccess<'_, 'de> {
+    type Error = Error;
+    type Variant = Self;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
+    where
+        V: serde::de::DeserializeSeed<'de>,
+    {
+        let variant = if self.map_key {
+            seed.deserialize(MapKey { de: &mut *self.de })?
+        } else {
+            seed.deserialize(&mut *self.de)?
+        };
+        Ok((variant, self))
+    }
+}
+
+impl<'de> serde::de::VariantAccess<'de> for UnitVariantAccess<'_, 'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<()> {
+        Ok(())
+    }
+
+    fn newtype_variant_seed<T>(self, _: T) -> Result<T::Value>
+    where
+        T: serde::de::DeserializeSeed<'de>,
+    {
+        Err(serde::de::Error::invalid_type(
+            serde::de::Unexpected::UnitVariant,
+            &"newtype variant",
+        ))
+    }
+
+    fn tuple_variant<V>(self, _: usize, _: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        Err(serde::de::Error::invalid_type(
+            serde::de::Unexpected::UnitVariant,
+            &"tuple variant",
+        ))
+    }
+
+    fn struct_variant<V>(self, _: &'static [&'static str], _: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        Err(serde::de::Error::invalid_type(
+            serde::de::Unexpected::UnitVariant,
+            &"struct variant",
+        ))
+    }
 }
 
 enum StringResult<'de> {

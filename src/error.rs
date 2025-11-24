@@ -44,6 +44,7 @@ pub enum ErrorCode {
     ExpectedOpeningBrace,
     ExpectedOpeningBracket,
     ExpectedString,
+    ExpectedStringOrObject,
     ExpectedValue,
 
     InvalidEscapeSequence,
@@ -79,6 +80,7 @@ impl Display for ErrorCode {
             ErrorCode::ExpectedOpeningBrace => write!(f, "expected opening brace"),
             ErrorCode::ExpectedOpeningBracket => write!(f, "expected opening bracket"),
             ErrorCode::ExpectedString => write!(f, "expected string"),
+            ErrorCode::ExpectedStringOrObject => write!(f, "expected string or object"),
             ErrorCode::ExpectedValue => write!(f, "expected value"),
 
             ErrorCode::InvalidEscapeSequence => write!(f, "invalid escape sequence"),
@@ -148,6 +150,14 @@ impl Error {
                 position: Some(position),
             }),
         }
+    }
+
+    #[must_use]
+    pub fn with_position(mut self, position: Position) -> Self {
+        if self.inner.position.is_none() {
+            self.inner.position = Some(position);
+        }
+        self
     }
 }
 

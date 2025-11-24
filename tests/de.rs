@@ -14,10 +14,6 @@ fn err_at(line: usize, column: usize, code: ErrorCode) -> Error {
     Error::new_at(Position { line, column }, code)
 }
 
-fn custom_err(msg: &str) -> Error {
-    Error::custom(msg)
-}
-
 fn custom_err_at(line: usize, column: usize, msg: &str) -> Error {
     Error::custom_at(Position { line, column }, msg)
 }
@@ -98,7 +94,9 @@ fn parse_number() {
     );
     assert_eq!(
         from_str::<i64>("0x8000000000000000"), // i64::MAX + 1
-        Err(custom_err(
+        Err(custom_err_at(
+            0,
+            0,
             "invalid value: integer `9223372036854775808`, expected i64"
         ))
     );
@@ -132,7 +130,9 @@ fn parse_string() {
 
     assert_eq!(
         from_str::<char>(r#"'ab'"#),
-        Err(custom_err(
+        Err(custom_err_at(
+            0,
+            0,
             "invalid value: string \"ab\", expected a character"
         ))
     );
@@ -159,13 +159,17 @@ fn parse_string() {
     assert_eq!(from_str::<String>("'..."), Err(err(EofParsingString)));
     assert_eq!(
         from_str::<&str>(r#""two\nlines""#),
-        Err(custom_err(
+        Err(custom_err_at(
+            0,
+            0,
             "invalid type: string \"two\\nlines\", expected a borrowed string",
         )),
     );
     assert_eq!(
         from_str::<char>("'ab'"),
-        Err(custom_err(
+        Err(custom_err_at(
+            0,
+            0,
             "invalid value: string \"ab\", expected a character"
         ))
     );
@@ -207,7 +211,10 @@ fn parse_array() {
         from_str::<(i32, i32)>("[1, 2, 3]"),
         Err(err_at(0, 7, ExpectedClosingBracket))
     );
-    assert_eq!(from_str::<Vec<i32>>("[1, 2"), Err(err(EofParsingArray)));
+    assert_eq!(
+        from_str::<Vec<i32>>("[1, 2"),
+        Err(err_at(0, 0, EofParsingArray))
+    );
     assert_eq!(
         from_str::<Vec<i32>>("[1 2]"),
         Err(err_at(0, 3, ExpectedComma))
@@ -216,13 +223,18 @@ fn parse_array() {
         from_str::<Vec<i32>>("[ , ]"),
         Err(err_at(0, 2, ExpectedNumber))
     );
-
-    // TODO structs from arrays
 }
 
 // https://spec.json5.org/#objects
 #[test]
 fn parse_object() {
+    #[derive(Debug, PartialEq, Eq, Hash, Deserialize)]
+    enum E {
+        A,
+        B,
+        C(()),
+    }
+
     #[derive(Debug, PartialEq, Deserialize)]
     struct Example<'a> {
         #[serde(borrow)]
@@ -347,6 +359,10 @@ fn parse_object() {
             ("height".as_bytes(), 1080)
         ]))
     );
+    assert_eq!(
+        from_str("{ A: 0, B: 1 }"),
+        Ok(HashMap::from([(E::A, 0), (E::B, 1)]))
+    );
 
     assert_eq!(
         from_str::<HashMap<String, u32>>(r#"{ foo\nbar: 42 }"#),
@@ -362,19 +378,39 @@ fn parse_object() {
     );
     assert_eq!(
         from_str::<Person>("{ name 'Joe', age 27 }"),
-        Err(err_at(0, 7, ErrorCode::ExpectedColon))
+        Err(err_at(0, 7, ExpectedColon))
     );
     assert_eq!(
         from_str::<Person>("{ name: 'Joe' age: 27 }"),
-        Err(err_at(0, 14, ErrorCode::ExpectedComma))
+        Err(err_at(0, 14, ExpectedComma))
     );
     assert_eq!(
         from_str::<Person>("{ name: 'Joe', age: 27"),
-        Err(err(ErrorCode::EofParsingObject))
+        Err(err_at(0, 0, EofParsingObject))
     );
     assert_eq!(
         from_str::<Person>("[ name: 'Joe', age: 27 ]"),
-        Err(err_at(0, 0, ErrorCode::ExpectedOpeningBrace))
+        Err(err_at(0, 0, ExpectedOpeningBrace))
+    );
+    assert_eq!(
+        from_str::<HashMap<E, i32>>("{ A: 0, B: 1, C: 2 }"),
+        Err(custom_err_at(
+            0,
+            14,
+            "invalid type: unit variant, expected newtype variant"
+        ))
+    );
+    assert_eq!(
+        from_str::<HashMap<E, i32>>("{ A: 0, B: 1, { C: null }: 2 }"),
+        Err(err_at(0, 14, ExpectedIdentifier))
+    );
+    assert_eq!(
+        from_str::<HashMap<E, i32>>("{ A: 0, B: 1, D: 2 }"),
+        Err(custom_err_at(
+            0,
+            14,
+            "unknown variant `D`, expected one of `A`, `B`, `C`"
+        ))
     );
 }
 
@@ -384,7 +420,62 @@ fn deserialize_option() {
     assert_eq!(from_str::<Option<bool>>("true"), Ok(Some(true)));
 }
 
-// TODO bytes from strings and arrays
+// Examples from https://serde.rs/json.html
+#[test]
+fn deserialize_structs_and_enums() {
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct W {
+        a: i32,
+        b: i32,
+    }
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct X(i32, i32);
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct Y(i32);
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct Z;
+
+    #[derive(Debug, PartialEq, Deserialize)]
+    enum E {
+        W { a: i32, b: i32 },
+        X(i32, i32),
+        Y(i32),
+        Z,
+    }
+
+    assert_eq!(from_str("{ a: 0, b: 0 }"), Ok(W { a: 0, b: 0 }));
+    assert_eq!(from_str("[0, 0]"), Ok(X(0, 0)));
+    assert_eq!(from_str("0"), Ok(Y(0)));
+    assert_eq!(from_str("null"), Ok(Z));
+    assert_eq!(from_str("{ W: { a: 0, b: 0 } }"), Ok(E::W { a: 0, b: 0 }));
+    assert_eq!(from_str("{ X: [0, 0] }"), Ok(E::X(0, 0)));
+    assert_eq!(from_str("{ Y: 0 }"), Ok(E::Y(0)));
+    assert_eq!(from_str("'Z'"), Ok(E::Z));
+
+    assert_eq!(
+        from_str::<E>("'A'"),
+        Err(custom_err_at(
+            0,
+            0,
+            "unknown variant `A`, expected one of `W`, `X`, `Y`, `Z`"
+        ))
+    );
+    assert_eq!(
+        from_str::<E>("'W'"),
+        Err(custom_err_at(
+            0,
+            0,
+            "invalid type: unit variant, expected struct variant"
+        ))
+    );
+    assert_eq!(
+        from_str::<E>("{ W: 0 }"),
+        Err(err_at(0, 5, ExpectedOpeningBrace))
+    );
+}
 
 #[test]
 fn comments() {
