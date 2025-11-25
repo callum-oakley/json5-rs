@@ -7,14 +7,7 @@ use std::{
 
 use serde::{Deserialize, de::Visitor, forward_to_deserialize_any};
 
-use crate::{
-    error::{Error, ErrorCode, Position, Result},
-    unicode::{
-        CONNECTOR_PUNCTUATION, DECIMAL_NUMBER, LETTER_NUMBER, LOWERCASE_LETTER, MODIFIER_LETTER,
-        NONSPACING_MARK, OTHER_LETTER, SPACE_SEPARATOR, SPACING_MARK, TITLECASE_LETTER,
-        UPPERCASE_LETTER,
-    },
-};
+use crate::error::{Error, ErrorCode, Position, Result};
 
 pub fn from_str<'de, T: Deserialize<'de>>(input: &'de str) -> Result<T> {
     let mut deserializer = Deserializer::from_str(input);
@@ -116,7 +109,7 @@ impl<'de> Deserializer<'de> {
     fn skip_whitespace(&mut self) -> Result<()> {
         while let Some((_, c)) = self.peek() {
             match c {
-                _ if is_json5_whitespace(c) => {
+                _ if crate::char::is_json5_whitespace(c) => {
                     self.next();
                 }
                 '/' => {
@@ -137,7 +130,7 @@ impl<'de> Deserializer<'de> {
         match c {
             '/' => {
                 while let Some((_, c)) = self.next() {
-                    if is_json5_line_terminator(c) {
+                    if crate::char::is_json5_line_terminator(c) {
                         break;
                     }
                 }
@@ -350,7 +343,7 @@ impl<'de> Deserializer<'de> {
         let (offset, c) = self.next_or(ErrorCode::EofParsingEscapeSequence)?;
         match c {
             // LineTerminatorSequence
-            _ if is_json5_line_terminator(c) => {
+            _ if crate::char::is_json5_line_terminator(c) => {
                 if c == '\u{000D}' && self.peek().is_some_and(|(_, c)| c == '\u{000A}') {
                     self.next();
                 }
@@ -393,7 +386,7 @@ impl<'de> Deserializer<'de> {
             }
             value = value * 16 + c.to_digit(16).expect("c.is_ascii_hexdigit");
         }
-        Ok(char::from_u32(value).expect("escape sequence isn't long enough to overflow a char"))
+        Ok(char::try_from(value).expect("escape sequence isn't long enough to overflow a char"))
     }
 
     // https://spec.json5.org/#objects
@@ -424,10 +417,10 @@ impl<'de> Deserializer<'de> {
                 )?;
                 let c = self.parse_hex_escape_sequence(4)?;
                 if offset == start {
-                    if !is_json5_identifier_start(c) {
+                    if !crate::char::is_json5_identifier_start(c) {
                         return Err(self.err_at(offset, ErrorCode::ExpectedIdentifier));
                     }
-                } else if !is_json5_identifier(c) {
+                } else if !crate::char::is_json5_identifier(c) {
                     return Err(self.err_at(offset, ErrorCode::ExpectedIdentifier));
                 }
                 owned.push(c);
@@ -435,10 +428,10 @@ impl<'de> Deserializer<'de> {
             }
 
             if offset == start {
-                if !is_json5_identifier_start(c) {
+                if !crate::char::is_json5_identifier_start(c) {
                     return Err(self.err_at(offset, ErrorCode::ExpectedIdentifier));
                 }
-            } else if !is_json5_identifier(c) {
+            } else if !crate::char::is_json5_identifier(c) {
                 return Ok(match owned {
                     Some(owned) => StringResult::Owned(owned),
                     None => StringResult::Borrowed(&self.input[start..offset]),
@@ -450,6 +443,23 @@ impl<'de> Deserializer<'de> {
                 owned.push(c);
             }
         }
+    }
+
+    fn decode_hex(&self, offset: usize, s: &str) -> Result<Vec<u8>> {
+        let mut chars = s.chars();
+        let mut bytes = Vec::new();
+        while let Some(a) = chars.next() {
+            match a
+                .to_digit(16)
+                .and_then(|a| chars.next().and_then(|b| b.to_digit(16)).map(|b| (a, b)))
+            {
+                Some((a, b)) => {
+                    bytes.push(u8::try_from(a * 16 + b).expect("two hex digits fit in a u8"));
+                }
+                None => return Err(self.err_at(offset, ErrorCode::InvalidBytes)),
+            }
+        }
+        Ok(bytes)
     }
 
     fn err_at(&self, offset: usize, code: ErrorCode) -> Error {
@@ -496,13 +506,9 @@ macro_rules! deserialize_bytes {
     ($method:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
             let (offset, s) = self.parse_string()?;
-            match s {
-                StringResult::Borrowed(borrowed) => {
-                    visitor.visit_borrowed_bytes(borrowed.as_bytes())
-                }
-                StringResult::Owned(owned) => visitor.visit_byte_buf(owned.into()),
-            }
-            .map_err(|err| self.with_position(err, offset))
+            visitor
+                .visit_byte_buf(self.decode_hex(offset, &s)?)
+                .map_err(|err| self.with_position(err, offset))
         }
     };
 }
@@ -793,14 +799,10 @@ macro_rules! deserialize_string_key {
 macro_rules! deserialize_bytes_key {
     ($method:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-            let (offset, key) = self.de.parse_key()?;
-            match key {
-                StringResult::Borrowed(borrowed) => {
-                    visitor.visit_borrowed_bytes(borrowed.as_bytes())
-                }
-                StringResult::Owned(owned) => visitor.visit_byte_buf(owned.into()),
-            }
-            .map_err(|err| self.de.with_position(err, offset))
+            let (offset, s) = self.de.parse_key()?;
+            visitor
+                .visit_byte_buf(self.de.decode_hex(offset, &s)?)
+                .map_err(|err| self.de.with_position(err, offset))
         }
     };
 }
@@ -1003,40 +1005,4 @@ enum NumberResult {
     U64(u64),
     I64(i64),
     F64(f64),
-}
-
-// This is NOT the same as char::is_whitespace.
-//
-// https://spec.json5.org/#white-space
-fn is_json5_whitespace(c: char) -> bool {
-    matches!(
-        c,
-        '\u{0009}'..='\u{000D}' | '\u{0020}' | '\u{00A0}' | '\u{2028}' | '\u{2029}' | '\u{FEFF}'
-    ) || SPACE_SEPARATOR.contains_char(c)
-}
-
-// https://262.ecma-international.org/5.1/#sec-7.3
-pub fn is_json5_line_terminator(c: char) -> bool {
-    matches!(c, '\u{000A}' | '\u{000D}' | '\u{2028}' | '\u{2029}')
-}
-
-// https://262.ecma-international.org/5.1/#sec-7.6
-fn is_json5_identifier_start(c: char) -> bool {
-    matches!(c, '\\' | '$' | '_')
-        || UPPERCASE_LETTER.contains_char(c)
-        || LOWERCASE_LETTER.contains_char(c)
-        || TITLECASE_LETTER.contains_char(c)
-        || MODIFIER_LETTER.contains_char(c)
-        || OTHER_LETTER.contains_char(c)
-        || LETTER_NUMBER.contains_char(c)
-}
-
-// https://262.ecma-international.org/5.1/#sec-7.6
-fn is_json5_identifier(c: char) -> bool {
-    is_json5_identifier_start(c)
-        || matches!(c, '\u{200C}' | '\u{200D}')
-        || NONSPACING_MARK.contains_char(c)
-        || SPACING_MARK.contains_char(c)
-        || DECIMAL_NUMBER.contains_char(c)
-        || CONNECTOR_PUNCTUATION.contains_char(c)
 }

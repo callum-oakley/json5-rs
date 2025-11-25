@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use json5::{Error, ErrorCode, Position, from_str};
 
 use ErrorCode::*;
-use serde_bytes::ByteBuf;
+use serde_bytes::{ByteBuf, Bytes};
 use serde_derive::Deserialize;
+use serde_json::json;
 
 fn err(code: ErrorCode) -> Error {
     Error::new(code)
@@ -125,8 +126,6 @@ fn parse_string() {
     assert_eq!(from_str("'one \\\r\nline'"), Ok("one line".to_owned()));
     assert_eq!(from_str(r#""zero: '\0'""#), Ok("zero: '\0'".to_owned()));
     assert_eq!(from_str(r#"'\u4f60\u597d\x21'"#), Ok("你好!".to_owned()));
-    assert_eq!(from_str("'foo'"), Ok("foo".as_bytes()));
-    assert_eq!(from_str(r#""two\nlines""#), Ok(ByteBuf::from("two\nlines")));
 
     assert_eq!(
         from_str::<char>(r#"'ab'"#),
@@ -344,22 +343,6 @@ fn parse_object() {
         Ok(HashMap::from([(Some('a'), 0), (Some('b'), 1)]))
     );
     assert_eq!(
-        from_str(
-            "
-            // An object with two properties
-            // and a trailing comma
-            {
-                width: 1920,
-                height: 1080,
-            }
-            "
-        ),
-        Ok(HashMap::from([
-            ("width".as_bytes(), 1920),
-            ("height".as_bytes(), 1080)
-        ]))
-    );
-    assert_eq!(
         from_str("{ A: 0, B: 1 }"),
         Ok(HashMap::from([(E::A, 0), (E::B, 1)]))
     );
@@ -490,5 +473,84 @@ fn comments() {
             "
         ),
         Ok(())
+    );
+}
+
+#[test]
+fn bytes() {
+    assert_eq!(from_str("'4a534f4e35'"), Ok(ByteBuf::from("JSON5")));
+    assert_eq!(from_str("'4A534F4E35'"), Ok(ByteBuf::from("JSON5")));
+    assert_eq!(
+        from_str("{ '4a534f4e35': true }"),
+        Ok(HashMap::from([(ByteBuf::from("JSON5"), true)])),
+    );
+    assert_eq!(
+        from_str("{ '4A534F4E35': true }"),
+        Ok(HashMap::from([(ByteBuf::from("JSON5"), true)])),
+    );
+
+    assert_eq!(
+        from_str::<ByteBuf>("'4a534f4e3'"),
+        Err(err_at(0, 0, InvalidBytes))
+    );
+    assert_eq!(
+        from_str::<HashMap<ByteBuf, bool>>("{ '4a534f4e3g': true }"),
+        Err(err_at(0, 2, InvalidBytes))
+    );
+}
+
+#[test]
+fn trailing_characters() {
+    assert_eq!(
+        from_str::<bool>("true false"),
+        Err(err_at(0, 5, ErrorCode::TrailingCharacters))
+    );
+}
+
+// "Kitchen-sink example" from https://json5.org/
+#[test]
+fn json5_org_example() {
+    assert_eq!(
+        from_str(
+            r#"
+            {
+                // comments
+                unquoted: 'and you can quote me on that',
+                singleQuotes: 'I can use "double quotes" here',
+                lineBreaks: "Look, Mom! \
+No \\n's!",
+                hexadecimal: 0xdecaf,
+                leadingDecimalPoint: .8675309, andTrailing: 8675309.,
+                positiveSign: +1,
+                trailingComma: 'in objects', andIn: ['arrays',],
+                "backwardsCompatible": "with JSON",
+            }
+            "#
+        ),
+        Ok(json!({
+            "unquoted": "and you can quote me on that",
+            "singleQuotes": "I can use \"double quotes\" here",
+            "lineBreaks": "Look, Mom! No \\n's!",
+            "hexadecimal": 0xdecaf,
+            "leadingDecimalPoint": 0.8675309,
+            "andTrailing": 8675309.0,
+            "positiveSign": 1,
+            "trailingComma": "in objects",
+            "andIn": ["arrays"],
+            "backwardsCompatible": "with JSON",
+        }))
+    )
+}
+
+// Example from
+// https://github.com/chromium/chromium/blob/d1987ba98386e8a455c0b983650dfd9687d14636/third_party/blink/renderer/platform/runtime_enabled_features.json5.
+// Suggested as a "more real-world example" on https://json5.org/.
+#[test]
+fn chromium_example() {
+    // Just pull out the first value as a sanity check.
+    assert_eq!(
+        from_str::<serde_json::Value>(include_str!("chromium_example.json5"))
+            .map(|config| config["parameters"]["status"]["valid_values"][0].clone()),
+        Ok(serde_json::Value::String("stable".to_owned()))
     );
 }

@@ -47,6 +47,7 @@ pub enum ErrorCode {
     ExpectedStringOrObject,
     ExpectedValue,
 
+    InvalidBytes,
     InvalidEscapeSequence,
     LeadingZero,
     LineTerminatorInString,
@@ -83,6 +84,7 @@ impl Display for ErrorCode {
             ErrorCode::ExpectedStringOrObject => write!(f, "expected string or object"),
             ErrorCode::ExpectedValue => write!(f, "expected value"),
 
+            ErrorCode::InvalidBytes => write!(f, "invalid bytes"),
             ErrorCode::InvalidEscapeSequence => write!(f, "invalid escape sequence"),
             ErrorCode::LeadingZero => write!(f, "leading zero"),
             ErrorCode::LineTerminatorInString => write!(f, "line terminator in string"),
@@ -167,6 +169,18 @@ impl serde::de::Error for Error {
     }
 }
 
+impl serde::ser::Error for Error {
+    fn custom<T: Display>(msg: T) -> Self {
+        Self::custom(msg)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::custom(err)
+    }
+}
+
 impl std::error::Error for Error {}
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -183,7 +197,7 @@ impl Position {
         let mut res = Self { line: 0, column: 0 };
         let mut chars = input[..offset].chars().peekable();
         while let Some(c) = chars.next() {
-            if crate::de::is_json5_line_terminator(c) {
+            if crate::char::is_json5_line_terminator(c) {
                 // "The character sequence <CR><LF> is commonly used as a line terminator. It
                 // should be considered a single character for the purpose of reporting line
                 // numbers." – https://262.ecma-international.org/5.1/#sec-7.3
