@@ -1,4 +1,5 @@
-use json5::to_string;
+use indexmap::IndexMap;
+use json5::{Error, ErrorCode, to_string};
 use serde_bytes::{ByteBuf, Bytes};
 use serde_derive::Serialize;
 
@@ -63,7 +64,6 @@ fn serialize_bytes() {
         to_string(&ByteBuf::from("JSON5")),
         Ok(r#""4a534f4e35""#.to_owned())
     );
-    // TODO object keys
 }
 
 // https://spec.json5.org/#arrays
@@ -81,5 +81,65 @@ fn serialize_array() {
     assert_eq!(
         to_string(&(1, true, "three")),
         Ok("[\n  1,\n  true,\n  \"three\",\n]".to_owned())
+    );
+}
+
+// https://spec.json5.org/#objects
+#[test]
+fn serialize_object() {
+    #[derive(PartialEq, Eq, Hash, Serialize)]
+    enum E {
+        A,
+        B,
+        C(()),
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "kebab-case")]
+    struct Image<'a> {
+        width: usize,
+        height: usize,
+        aspect_ratio: &'a str,
+    }
+
+    assert_eq!(
+        to_string::<IndexMap<&str, i32>>(&IndexMap::new()),
+        Ok("{}".to_owned())
+    );
+    assert_eq!(
+        to_string(&IndexMap::from([("foo", 0), ("bar", 1), ("a b", 3)])),
+        Ok("{\n  foo: 0,\n  bar: 1,\n  \"a b\": 3,\n}".to_owned())
+    );
+    assert_eq!(
+        to_string(&IndexMap::from([(ByteBuf::from("JSON5"), 0)])),
+        Ok("{\n  \"4a534f4e35\": 0,\n}".to_owned())
+    );
+    assert_eq!(
+        to_string(&IndexMap::from([(true, "yes"), (false, "no")])),
+        Ok("{\n  true: \"yes\",\n  false: \"no\",\n}".to_owned())
+    );
+    assert_eq!(
+        to_string(&IndexMap::from([
+            ('τ', std::f64::consts::TAU),
+            ('∞', f64::INFINITY),
+        ])),
+        Ok("{\n  τ: 6.283185307179586,\n  \"∞\": Infinity,\n}".to_owned())
+    );
+    assert_eq!(
+        to_string(&IndexMap::from([(E::A, 'a'), (E::B, 'b'),])),
+        Ok("{\n  A: \"a\",\n  B: \"b\",\n}".to_owned())
+    );
+    assert_eq!(
+        to_string(&Image {
+            width: 1920,
+            height: 1080,
+            aspect_ratio: "16:9",
+        }),
+        Ok("{\n  width: 1920,\n  height: 1080,\n  \"aspect-ratio\": \"16:9\",\n}".to_owned())
+    );
+
+    assert_eq!(
+        to_string(&IndexMap::from([(E::A, 'a'), (E::B, 'b'), (E::C(()), 'c')])),
+        Err(Error::new(ErrorCode::InvalidKey)),
     );
 }

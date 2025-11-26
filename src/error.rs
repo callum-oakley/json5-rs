@@ -49,6 +49,7 @@ pub enum ErrorCode {
 
     InvalidBytes,
     InvalidEscapeSequence,
+    InvalidKey,
     LeadingZero,
     LineTerminatorInString,
     OverflowParsingNumber,
@@ -86,6 +87,7 @@ impl Display for ErrorCode {
 
             ErrorCode::InvalidBytes => write!(f, "invalid bytes"),
             ErrorCode::InvalidEscapeSequence => write!(f, "invalid escape sequence"),
+            ErrorCode::InvalidKey => write!(f, "invalid key"),
             ErrorCode::LeadingZero => write!(f, "leading zero"),
             ErrorCode::LineTerminatorInString => write!(f, "line terminator in string"),
             ErrorCode::OverflowParsingNumber => write!(f, "overflow parsing number"),

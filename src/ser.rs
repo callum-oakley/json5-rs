@@ -1,8 +1,8 @@
 use std::io::Write;
 
-use serde::Serialize;
+use serde::{Serialize, ser::Impossible};
 
-use crate::{Error, error::Result};
+use crate::{Error, ErrorCode, error::Result};
 
 pub fn to_string<T: Serialize>(value: &T) -> Result<String> {
     let mut w = Vec::new();
@@ -26,7 +26,7 @@ impl<W: Write> Serializer<W> {
 }
 
 macro_rules! serialize_display {
-    ($method:ident, $type:ident) => {
+    ($method:ident, $type:ty) => {
         fn $method(self, v: $type) -> Result<Self::Ok> {
             write!(self.w, "{v}").map_err(Into::into)
         }
@@ -34,7 +34,7 @@ macro_rules! serialize_display {
 }
 
 macro_rules! serialize_float {
-    ($method:ident, $type:ident) => {
+    ($method:ident, $type:ty) => {
         fn $method(self, v: $type) -> Result<Self::Ok> {
             match (v.is_nan(), v.is_infinite(), v.is_sign_negative()) {
                 (true, false, false) => write!(self.w, "NaN"),
@@ -83,19 +83,19 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
-        let delimeter = if v.contains('"') && !v.contains('\'') {
+        let delimiter = if v.contains('"') && !v.contains('\'') {
             '\''
         } else {
             '"'
         };
-        write!(self.w, "{delimeter}")?;
+        write!(self.w, "{delimiter}")?;
         for c in v.chars() {
-            match crate::char::escape(delimeter, c) {
+            match crate::char::escape(delimiter, c) {
                 Some(escaped) => write!(self.w, "{escaped}")?,
                 None => write!(self.w, "{c}")?,
             }
         }
-        write!(self.w, "{delimeter}")?;
+        write!(self.w, "{delimiter}")?;
         Ok(())
     }
 
@@ -188,10 +188,15 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
-        todo!()
+        write!(self.w, "{{")?;
+        self.depth += 1;
+        Ok(SerializeCollection {
+            ser: self,
+            empty: true,
+        })
     }
 
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct> {
+    fn serialize_struct(self, _: &'static str, len: usize) -> Result<Self::SerializeStruct> {
         self.serialize_map(Some(len))
     }
 
@@ -293,18 +298,35 @@ impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, W> {
     where
         T: ?Sized + Serialize,
     {
-        todo!()
+        self.empty = false;
+        write!(self.ser.w, "\n{:indent$}", "", indent = self.ser.depth * 2)?;
+        key.serialize(MapKey { ser: self.ser })?;
+        write!(self.ser.w, ": ")?;
+        Ok(())
     }
 
     fn serialize_value<T>(&mut self, value: &T) -> Result<()>
     where
         T: ?Sized + Serialize,
     {
-        todo!()
+        value.serialize(&mut *self.ser)?;
+        write!(self.ser.w, ",")?;
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok> {
-        todo!()
+        self.ser.depth -= 1;
+        if self.empty {
+            write!(self.ser.w, "}}")?;
+        } else {
+            write!(
+                self.ser.w,
+                "\n{:indent$}}}",
+                "",
+                indent = self.ser.depth * 2
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -316,11 +338,11 @@ impl<W: Write> serde::ser::SerializeStruct for SerializeCollection<'_, W> {
     where
         T: ?Sized + Serialize,
     {
-        todo!()
+        serde::ser::SerializeMap::serialize_entry(self, key, value)
     }
 
     fn end(self) -> Result<Self::Ok> {
-        todo!()
+        serde::ser::SerializeMap::end(self)
     }
 }
 
@@ -337,5 +359,173 @@ impl<W: Write> serde::ser::SerializeStructVariant for SerializeCollection<'_, W>
 
     fn end(self) -> Result<Self::Ok> {
         todo!()
+    }
+}
+
+macro_rules! serialize_unquoted {
+    ($method:ident, $type:ty) => {
+        fn $method(self, v: $type) -> Result<Self::Ok> {
+            self.ser.$method(v)
+        }
+    };
+}
+
+macro_rules! serialize_quoted {
+    ($method:ident, $type:ty) => {
+        fn $method(self, v: $type) -> Result<Self::Ok> {
+            write!(self.ser.w, "\"")?;
+            self.ser.$method(v)?;
+            write!(self.ser.w, "\"")?;
+            Ok(())
+        }
+    };
+}
+
+struct MapKey<'a, W: Write> {
+    ser: &'a mut Serializer<W>,
+}
+
+impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
+    type Ok = ();
+    type Error = Error;
+    type SerializeSeq = Impossible<(), Error>;
+    type SerializeTuple = Impossible<(), Error>;
+    type SerializeTupleStruct = Impossible<(), Error>;
+    type SerializeTupleVariant = Impossible<(), Error>;
+    type SerializeMap = Impossible<(), Error>;
+    type SerializeStruct = Impossible<(), Error>;
+    type SerializeStructVariant = Impossible<(), Error>;
+
+    serialize_quoted!(serialize_u8, u8);
+    serialize_quoted!(serialize_u16, u16);
+    serialize_quoted!(serialize_u32, u32);
+    serialize_quoted!(serialize_u64, u64);
+    serialize_quoted!(serialize_i8, i8);
+    serialize_quoted!(serialize_i16, i16);
+    serialize_quoted!(serialize_i32, i32);
+    serialize_quoted!(serialize_i64, i64);
+    serialize_quoted!(serialize_f32, f32);
+    serialize_quoted!(serialize_f64, f64);
+
+    fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
+        self.ser.serialize_bool(v)
+    }
+
+    fn serialize_char(self, v: char) -> Result<Self::Ok> {
+        if crate::char::is_json5_identifier_start(v) {
+            write!(self.ser.w, "{v}")?;
+        } else {
+            self.ser.serialize_char(v)?;
+        }
+        Ok(())
+    }
+
+    fn serialize_str(self, v: &str) -> Result<Self::Ok> {
+        let mut chars = v.chars();
+        if let Some(first) = chars.next()
+            && crate::char::is_json5_identifier_start(first)
+            && chars.all(crate::char::is_json5_identifier)
+        {
+            write!(self.ser.w, "{v}")?;
+        } else {
+            self.ser.serialize_str(v)?;
+        }
+        Ok(())
+    }
+
+    fn serialize_unit_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        variant: &'static str,
+    ) -> Result<Self::Ok> {
+        self.serialize_str(variant)
+    }
+
+    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok> {
+        self.ser.serialize_bytes(v)
+    }
+
+    fn serialize_some<T>(self, v: &T) -> Result<Self::Ok>
+    where
+        T: ?Sized + Serialize,
+    {
+        self.ser.serialize_some(v)
+    }
+
+    fn serialize_unit(self) -> Result<Self::Ok> {
+        self.ser.serialize_unit()
+    }
+
+    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok> {
+        self.ser.serialize_unit_struct(name)
+    }
+
+    fn serialize_newtype_struct<T>(self, _: &'static str, value: &T) -> Result<Self::Ok>
+    where
+        T: ?Sized + Serialize,
+    {
+        value.serialize(self)
+    }
+
+    fn serialize_none(self) -> Result<Self::Ok> {
+        Err(Error::new(ErrorCode::InvalidKey))
+    }
+
+    fn serialize_newtype_variant<T>(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: &T,
+    ) -> Result<Self::Ok>
+    where
+        T: ?Sized + Serialize,
+    {
+        Err(Error::new(ErrorCode::InvalidKey))
+    }
+
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq> {
+        Err(Error::new(ErrorCode::InvalidKey))
+    }
+
+    fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple> {
+        Err(Error::new(ErrorCode::InvalidKey))
+    }
+
+    fn serialize_tuple_struct(
+        self,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeTupleStruct> {
+        Err(Error::new(ErrorCode::InvalidKey))
+    }
+
+    fn serialize_tuple_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeTupleVariant> {
+        Err(Error::new(ErrorCode::InvalidKey))
+    }
+
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap> {
+        Err(Error::new(ErrorCode::InvalidKey))
+    }
+
+    fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self::SerializeStruct> {
+        Err(Error::new(ErrorCode::InvalidKey))
+    }
+
+    fn serialize_struct_variant(
+        self,
+        _: &'static str,
+        _: u32,
+        _: &'static str,
+        _: usize,
+    ) -> Result<Self::SerializeStructVariant> {
+        Err(Error::new(ErrorCode::InvalidKey))
     }
 }

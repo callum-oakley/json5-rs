@@ -21,7 +21,7 @@ pub fn is_json5_line_terminator(c: char) -> bool {
 
 /// <https://262.ecma-international.org/5.1/#sec-7.6>
 pub fn is_json5_identifier_start(c: char) -> bool {
-    matches!(c, '\\' | '$' | '_')
+    matches!(c, '$' | '_')
         || UPPERCASE_LETTER.contains_char(c)
         || LOWERCASE_LETTER.contains_char(c)
         || TITLECASE_LETTER.contains_char(c)
