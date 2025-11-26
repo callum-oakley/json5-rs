@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use json5::{Error, ErrorCode, Position, from_str};
 
 use ErrorCode::*;
-use serde_bytes::{ByteBuf, Bytes};
+use serde_bytes::ByteBuf;
 use serde_derive::Deserialize;
 use serde_json::json;
 
@@ -480,6 +480,7 @@ fn comments() {
 fn bytes() {
     assert_eq!(from_str("'4a534f4e35'"), Ok(ByteBuf::from("JSON5")));
     assert_eq!(from_str("'4A534F4E35'"), Ok(ByteBuf::from("JSON5")));
+    assert_eq!(from_str("'4A534F4E35'"), Ok(ByteBuf::from("JSON5")));
     assert_eq!(
         from_str("{ '4a534f4e35': true }"),
         Ok(HashMap::from([(ByteBuf::from("JSON5"), true)])),
@@ -496,6 +497,14 @@ fn bytes() {
     assert_eq!(
         from_str::<HashMap<ByteBuf, bool>>("{ '4a534f4e3g': true }"),
         Err(err_at(0, 2, InvalidBytes))
+    );
+    assert_eq!(
+        from_str::<&[u8]>("'4a534f4e35'"),
+        Err(custom_err_at(
+            0,
+            0,
+            "invalid type: byte array, expected a borrowed byte array"
+        ))
     );
 }
 

@@ -16,11 +16,12 @@ pub fn to_writer<T: Serialize, W: Write>(w: W, value: &T) -> Result<()> {
 
 pub struct Serializer<W: Write> {
     w: W,
+    depth: usize,
 }
 
 impl<W: Write> Serializer<W> {
     pub fn new(w: W) -> Self {
-        Self { w }
+        Self { w, depth: 0 }
     }
 }
 
@@ -47,16 +48,16 @@ macro_rules! serialize_float {
     };
 }
 
-impl<W: Write> serde::ser::Serializer for &mut Serializer<W> {
+impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
-    type SerializeSeq = Self;
-    type SerializeTuple = Self;
-    type SerializeTupleStruct = Self;
-    type SerializeTupleVariant = Self;
-    type SerializeMap = Self;
-    type SerializeStruct = Self;
-    type SerializeStructVariant = Self;
+    type SerializeSeq = SerializeCollection<'a, W>;
+    type SerializeTuple = SerializeCollection<'a, W>;
+    type SerializeTupleStruct = SerializeCollection<'a, W>;
+    type SerializeTupleVariant = SerializeCollection<'a, W>;
+    type SerializeMap = SerializeCollection<'a, W>;
+    type SerializeStruct = SerializeCollection<'a, W>;
+    type SerializeStructVariant = SerializeCollection<'a, W>;
 
     serialize_display!(serialize_bool, bool);
     serialize_display!(serialize_u8, u8);
@@ -155,8 +156,13 @@ impl<W: Write> serde::ser::Serializer for &mut Serializer<W> {
         todo!()
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
-        todo!()
+    fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq> {
+        write!(self.w, "[")?;
+        self.depth += 1;
+        Ok(SerializeCollection {
+            ser: self,
+            empty: true,
+        })
     }
 
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple> {
@@ -200,7 +206,12 @@ impl<W: Write> serde::ser::Serializer for &mut Serializer<W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeSeq for &mut Serializer<W> {
+pub struct SerializeCollection<'a, W: Write> {
+    ser: &'a mut Serializer<W>,
+    empty: bool,
+}
+
+impl<W: Write> serde::ser::SerializeSeq for SerializeCollection<'_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -208,15 +219,25 @@ impl<W: Write> serde::ser::SerializeSeq for &mut Serializer<W> {
     where
         T: ?Sized + Serialize,
     {
-        todo!()
+        self.empty = false;
+        write!(self.ser.w, "\n{:indent$}", "", indent = self.ser.depth * 2)?;
+        value.serialize(&mut *self.ser)?;
+        write!(self.ser.w, ",")?;
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok> {
-        todo!()
+        self.ser.depth -= 1;
+        if self.empty {
+            write!(self.ser.w, "]")?;
+        } else {
+            write!(self.ser.w, "\n{:indent$}]", "", indent = self.ser.depth * 2)?;
+        }
+        Ok(())
     }
 }
 
-impl<W: Write> serde::ser::SerializeTuple for &mut Serializer<W> {
+impl<W: Write> serde::ser::SerializeTuple for SerializeCollection<'_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -224,15 +245,31 @@ impl<W: Write> serde::ser::SerializeTuple for &mut Serializer<W> {
     where
         T: ?Sized + Serialize,
     {
-        todo!()
+        serde::ser::SerializeSeq::serialize_element(self, value)
     }
 
     fn end(self) -> Result<Self::Ok> {
-        todo!()
+        serde::ser::SerializeSeq::end(self)
     }
 }
 
-impl<W: Write> serde::ser::SerializeTupleStruct for &mut Serializer<W> {
+impl<W: Write> serde::ser::SerializeTupleStruct for SerializeCollection<'_, W> {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T>(&mut self, value: &T) -> Result<()>
+    where
+        T: ?Sized + Serialize,
+    {
+        serde::ser::SerializeSeq::serialize_element(self, value)
+    }
+
+    fn end(self) -> Result<Self::Ok> {
+        serde::ser::SerializeSeq::end(self)
+    }
+}
+
+impl<W: Write> serde::ser::SerializeTupleVariant for SerializeCollection<'_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -248,23 +285,7 @@ impl<W: Write> serde::ser::SerializeTupleStruct for &mut Serializer<W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeTupleVariant for &mut Serializer<W> {
-    type Ok = ();
-    type Error = Error;
-
-    fn serialize_field<T>(&mut self, value: &T) -> Result<()>
-    where
-        T: ?Sized + Serialize,
-    {
-        todo!()
-    }
-
-    fn end(self) -> Result<Self::Ok> {
-        todo!()
-    }
-}
-
-impl<W: Write> serde::ser::SerializeMap for &mut Serializer<W> {
+impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -287,7 +308,7 @@ impl<W: Write> serde::ser::SerializeMap for &mut Serializer<W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeStruct for &mut Serializer<W> {
+impl<W: Write> serde::ser::SerializeStruct for SerializeCollection<'_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -303,7 +324,7 @@ impl<W: Write> serde::ser::SerializeStruct for &mut Serializer<W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeStructVariant for &mut Serializer<W> {
+impl<W: Write> serde::ser::SerializeStructVariant for SerializeCollection<'_, W> {
     type Ok = ();
     type Error = Error;
 
