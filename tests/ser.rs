@@ -11,7 +11,6 @@ fn serialize_null() {
 
     assert_eq!(to_string(&()), Ok("null".to_owned()));
     assert_eq!(to_string(&A), Ok("null".to_owned()));
-    assert_eq!(to_string::<Option<i32>>(&None), Ok("null".to_owned()));
 }
 
 // https://spec.json5.org/#values
@@ -142,4 +141,55 @@ fn serialize_object() {
         to_string(&IndexMap::from([(E::A, 'a'), (E::B, 'b'), (E::C(()), 'c')])),
         Err(Error::new(ErrorCode::InvalidKey)),
     );
+}
+
+#[test]
+fn serialize_option() {
+    assert_eq!(to_string::<Option<i32>>(&None), Ok("null".to_owned()));
+    assert_eq!(to_string::<Option<i32>>(&Some(42)), Ok("42".to_owned()));
+}
+
+#[test]
+// Examples from https://serde.rs/json.html
+fn serialize_structs_and_enums() {
+    #[derive(Serialize)]
+    struct W {
+        a: i32,
+        b: i32,
+    }
+
+    #[derive(Serialize)]
+    struct X(i32, i32);
+
+    #[derive(Serialize)]
+    struct Y(i32);
+
+    #[derive(Serialize)]
+    struct Z;
+
+    #[derive(Serialize)]
+    enum E {
+        W { a: i32, b: i32 },
+        X(i32, i32),
+        Y(i32),
+        Z,
+    }
+
+    assert_eq!(
+        to_string(&W { a: 0, b: 0 }),
+        Ok("{\n  a: 0,\n  b: 0,\n}".to_owned())
+    );
+    assert_eq!(to_string(&X(0, 0)), Ok("[\n  0,\n  0,\n]".to_owned()));
+    assert_eq!(to_string(&Y(0)), Ok("0".to_owned()));
+    assert_eq!(to_string(&Z), Ok("null".to_owned()));
+    assert_eq!(
+        to_string(&E::W { a: 0, b: 0 }),
+        Ok("{\n  W: {\n    a: 0,\n    b: 0,\n  },\n}".to_owned())
+    );
+    assert_eq!(
+        to_string(&E::X(0, 0)),
+        Ok("{\n  X: [\n    0,\n    0,\n  ],\n}".to_owned())
+    );
+    assert_eq!(to_string(&E::Y(0)), Ok("{\n  Y: 0,\n}".to_owned()));
+    assert_eq!(to_string(&E::Z), Ok("\"Z\"".to_owned()));
 }

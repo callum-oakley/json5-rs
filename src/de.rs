@@ -9,6 +9,32 @@ use serde::{Deserialize, de::Visitor, forward_to_deserialize_any};
 
 use crate::error::{Error, ErrorCode, Position, Result};
 
+/// Parse a JSON5 string and map it to a type implementing [`Deserialize`].
+///
+/// # Example
+/// ```
+/// use serde_derive::Deserialize;
+///
+/// #[derive(Debug, PartialEq, Deserialize)]
+/// struct Config<'a> {
+///     foo: u32,
+///     bar: &'a str,
+/// }
+///
+/// let config: Config = json5::from_str("
+///   {
+///     // Note unquoted keys, comments, and trailing commas.
+///     foo: 42,
+///     bar: 'baz',
+///   }
+/// ")?;
+///
+/// assert_eq!(config, Config{ foo: 42, bar: "baz" });
+/// # Ok::<(), json5::Error>(())
+/// ```
+///
+/// # Errors
+/// Fails if the JSON5 is malformed or we can't map it to a `T`.
 pub fn from_str<'de, T: Deserialize<'de>>(input: &'de str) -> Result<T> {
     let mut deserializer = Deserializer::from_str(input);
     let t = T::deserialize(&mut deserializer)?;
@@ -19,12 +45,15 @@ pub fn from_str<'de, T: Deserialize<'de>>(input: &'de str) -> Result<T> {
     }
 }
 
+/// A deserializer that knows how to parse JSON5 and map it on to types implementing
+/// [`Deserialize`].
 pub struct Deserializer<'de> {
     input: &'de str,
     char_indices: Peekable<CharIndices<'de>>,
 }
 
 impl<'de> Deserializer<'de> {
+    /// Construct a deserializer that will read from the given JSON5 string.
     #[expect(
         clippy::should_implement_trait,
         reason = "Serde convention: https://serde.rs/conventions.html"

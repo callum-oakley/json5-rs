@@ -4,7 +4,7 @@ use crate::unicode::{
     UPPERCASE_LETTER,
 };
 
-/// This is NOT the same as `char::is_whitespace`.
+/// This is NOT the same as [`char::is_whitespace`].
 ///
 /// <https://spec.json5.org/#white-space>
 pub fn is_json5_whitespace(c: char) -> bool {

@@ -2,23 +2,40 @@ use std::fmt::{Display, Formatter};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// An error serializing or deserializing JSON5.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Error {
     inner: Box<ErrorInner>,
 }
 
+impl Error {
+    #[must_use]
+    pub fn code(&self) -> Option<ErrorCode> {
+        match self.inner.content {
+            ErrorContent::Code(code) => Some(code),
+            ErrorContent::Custom(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn position(&self) -> Option<Position> {
+        self.inner.position
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
-pub struct ErrorInner {
+struct ErrorInner {
     content: ErrorContent,
     position: Option<Position>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ErrorContent {
+enum ErrorContent {
     Code(ErrorCode),
     Custom(String),
 }
 
+/// A code identifying an error originating within this crate.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ErrorCode {
     EofParsingArray,
@@ -185,11 +202,12 @@ impl From<std::io::Error> for Error {
 
 impl std::error::Error for Error {}
 
+/// The line and column that an error occured.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Position {
-    // The first line is line 0
+    /// The first line is line 0.
     pub line: usize,
-    // The first column is column 0
+    /// The first column is column 0.
     pub column: usize,
 }
 

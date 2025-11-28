@@ -4,16 +4,50 @@ use serde::{Serialize, ser::Impossible};
 
 use crate::{Error, ErrorCode, error::Result};
 
+/// Serialize a type implementing [`Serialize`] to a JSON5 string.
+///
+/// # Example
+/// ```
+/// use serde_derive::Serialize;
+///
+/// #[derive(Serialize)]
+/// struct Config<'a> {
+///     foo: u32,
+///     bar: &'a str,
+/// }
+///
+/// let config = Config {
+///     foo: 42,
+///     bar: "baz",
+/// };
+///
+/// assert_eq!(&json5::to_string(&config)?, "{
+///   foo: 42,
+///   bar: \"baz\",
+/// }");
+/// # Ok::<(), json5::Error>(())
+/// ```
+///
+/// # Errors
+/// Fails if we can't express `T` in JSON5 (e.g. we try to serialize an object key without an
+/// obvious string representation).
 pub fn to_string<T: Serialize>(value: &T) -> Result<String> {
     let mut w = Vec::new();
     to_writer(&mut w, value)?;
-    Ok(String::from_utf8(w).expect("we only write valid UTF8"))
+    #[expect(clippy::missing_panics_doc)]
+    Ok(String::from_utf8(w).expect("we only write valid UTF-8"))
 }
 
+/// Serialize a type implementing [`Serialize`] to JSON5 and write it to the given writer.
+///
+/// # Errors
+/// Fails if we can't express `T` in JSON5 (e.g. we try to serialize an object key without an
+/// obvious string representation) or if there's an error writing to the writer.
 pub fn to_writer<T: Serialize, W: Write>(w: W, value: &T) -> Result<()> {
     value.serialize(&mut Serializer::new(w))
 }
 
+/// A serializer that knows how to serialize types implementing [`Serialize`] as JSON5.
 pub struct Serializer<W: Write> {
     w: W,
     depth: usize,
@@ -145,24 +179,29 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 
     fn serialize_newtype_variant<T>(
         self,
-        name: &'static str,
-        variant_index: u32,
+        _: &'static str,
+        _: u32,
         variant: &'static str,
-        value: &T,
+        v: &T,
     ) -> Result<Self::Ok>
     where
         T: ?Sized + Serialize,
     {
-        todo!()
+        write!(self.w, "{{")?;
+        self.depth += 1;
+        write!(self.w, "\n{:indent$}", "", indent = self.depth * 2)?;
+        MapKey::new(self).serialize_str(variant)?;
+        write!(self.w, ": ")?;
+        v.serialize(&mut *self)?;
+        self.depth -= 1;
+        write!(self.w, ",\n{:indent$}}}", "", indent = self.depth * 2)?;
+        Ok(())
     }
 
     fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq> {
         write!(self.w, "[")?;
         self.depth += 1;
-        Ok(SerializeCollection {
-            ser: self,
-            empty: true,
-        })
+        Ok(SerializeCollection::new(self))
     }
 
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple> {
@@ -179,21 +218,23 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 
     fn serialize_tuple_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
+        _: &'static str,
+        _: u32,
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
-        todo!()
-    }
-
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
         write!(self.w, "{{")?;
         self.depth += 1;
-        Ok(SerializeCollection {
-            ser: self,
-            empty: true,
-        })
+        write!(self.w, "\n{:indent$}", "", indent = self.depth * 2)?;
+        MapKey::new(self).serialize_str(variant)?;
+        write!(self.w, ": ")?;
+        self.serialize_seq(Some(len))
+    }
+
+    fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap> {
+        write!(self.w, "{{")?;
+        self.depth += 1;
+        Ok(SerializeCollection::new(self))
     }
 
     fn serialize_struct(self, _: &'static str, len: usize) -> Result<Self::SerializeStruct> {
@@ -202,18 +243,44 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 
     fn serialize_struct_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
+        _: &'static str,
+        _: u32,
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        todo!()
+        write!(self.w, "{{")?;
+        self.depth += 1;
+        write!(self.w, "\n{:indent$}", "", indent = self.depth * 2)?;
+        MapKey::new(self).serialize_str(variant)?;
+        write!(self.w, ": ")?;
+        self.serialize_map(Some(len))
     }
 }
 
 pub struct SerializeCollection<'a, W: Write> {
     ser: &'a mut Serializer<W>,
     empty: bool,
+}
+
+impl<'a, W: Write> SerializeCollection<'a, W> {
+    fn new(ser: &'a mut Serializer<W>) -> Self {
+        Self { ser, empty: true }
+    }
+
+    fn close(&mut self, delimiter: char) -> Result<()> {
+        self.ser.depth -= 1;
+        if self.empty {
+            write!(self.ser.w, "{delimiter}")?;
+        } else {
+            write!(
+                self.ser.w,
+                "\n{:indent$}{delimiter}",
+                "",
+                indent = self.ser.depth * 2
+            )?;
+        }
+        Ok(())
+    }
 }
 
 impl<W: Write> serde::ser::SerializeSeq for SerializeCollection<'_, W> {
@@ -231,14 +298,8 @@ impl<W: Write> serde::ser::SerializeSeq for SerializeCollection<'_, W> {
         Ok(())
     }
 
-    fn end(self) -> Result<Self::Ok> {
-        self.ser.depth -= 1;
-        if self.empty {
-            write!(self.ser.w, "]")?;
-        } else {
-            write!(self.ser.w, "\n{:indent$}]", "", indent = self.ser.depth * 2)?;
-        }
-        Ok(())
+    fn end(mut self) -> Result<Self::Ok> {
+        self.close(']')
     }
 }
 
@@ -282,11 +343,19 @@ impl<W: Write> serde::ser::SerializeTupleVariant for SerializeCollection<'_, W> 
     where
         T: ?Sized + Serialize,
     {
-        todo!()
+        serde::ser::SerializeSeq::serialize_element(self, value)
     }
 
-    fn end(self) -> Result<Self::Ok> {
-        todo!()
+    fn end(mut self) -> Result<Self::Ok> {
+        self.close(']')?;
+        self.ser.depth -= 1;
+        write!(
+            self.ser.w,
+            ",\n{:indent$}}}",
+            "",
+            indent = self.ser.depth * 2
+        )?;
+        Ok(())
     }
 }
 
@@ -300,7 +369,7 @@ impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, W> {
     {
         self.empty = false;
         write!(self.ser.w, "\n{:indent$}", "", indent = self.ser.depth * 2)?;
-        key.serialize(MapKey { ser: self.ser })?;
+        key.serialize(MapKey::new(self.ser))?;
         write!(self.ser.w, ": ")?;
         Ok(())
     }
@@ -314,19 +383,8 @@ impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, W> {
         Ok(())
     }
 
-    fn end(self) -> Result<Self::Ok> {
-        self.ser.depth -= 1;
-        if self.empty {
-            write!(self.ser.w, "}}")?;
-        } else {
-            write!(
-                self.ser.w,
-                "\n{:indent$}}}",
-                "",
-                indent = self.ser.depth * 2
-            )?;
-        }
-        Ok(())
+    fn end(mut self) -> Result<Self::Ok> {
+        self.close('}')
     }
 }
 
@@ -354,20 +412,20 @@ impl<W: Write> serde::ser::SerializeStructVariant for SerializeCollection<'_, W>
     where
         T: ?Sized + Serialize,
     {
-        todo!()
+        serde::ser::SerializeMap::serialize_entry(self, key, value)
     }
 
-    fn end(self) -> Result<Self::Ok> {
-        todo!()
+    fn end(mut self) -> Result<Self::Ok> {
+        self.close('}')?;
+        self.ser.depth -= 1;
+        write!(
+            self.ser.w,
+            ",\n{:indent$}}}",
+            "",
+            indent = self.ser.depth * 2
+        )?;
+        Ok(())
     }
-}
-
-macro_rules! serialize_unquoted {
-    ($method:ident, $type:ty) => {
-        fn $method(self, v: $type) -> Result<Self::Ok> {
-            self.ser.$method(v)
-        }
-    };
 }
 
 macro_rules! serialize_quoted {
@@ -383,6 +441,12 @@ macro_rules! serialize_quoted {
 
 struct MapKey<'a, W: Write> {
     ser: &'a mut Serializer<W>,
+}
+
+impl<'a, W: Write> MapKey<'a, W> {
+    fn new(ser: &'a mut Serializer<W>) -> Self {
+        Self { ser }
+    }
 }
 
 impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
