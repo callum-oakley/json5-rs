@@ -136,6 +136,10 @@ fn serialize_object() {
         }),
         Ok("{\n  width: 1920,\n  height: 1080,\n  \"aspect-ratio\": \"16:9\",\n}".to_owned())
     );
+    assert_eq!(
+        to_string(&IndexMap::from([(0, "zero"), (1, "one")])),
+        Ok("{\n  \"0\": \"zero\",\n  \"1\": \"one\",\n}".to_owned())
+    );
 
     assert_eq!(
         to_string(&IndexMap::from([(E::A, 'a'), (E::B, 'b'), (E::C(()), 'c')])),
