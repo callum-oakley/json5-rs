@@ -6,7 +6,7 @@ description = "A Rust JSON5 serializer and deserializer which speaks Serde."
 license = "MIT"
 repository = "https://github.com/callum-oakley/json5-rs"
 readme = "README.md"
-keywords = ["json5", "parse", "parser", "serde", "json", "jsonc"]
+keywords = ["json5", "parser", "serde", "json", "jsonc"]
 edition = "2024"
 
 [dependencies]
