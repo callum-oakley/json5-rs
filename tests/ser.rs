@@ -24,9 +24,20 @@ fn serialize_bool() {
 // https://spec.json5.org/#numbers
 #[test]
 fn serialize_number() {
-    assert_eq!(to_string(&123), Ok("123".to_owned()));
-    assert_eq!(to_string(&123.456), Ok("123.456".to_owned()));
-    assert_eq!(to_string(&-123.456), Ok("-123.456".to_owned()));
+    assert_eq!(to_string(&123u8), Ok("123".to_owned()));
+    assert_eq!(to_string(&123i8), Ok("123".to_owned()));
+    assert_eq!(to_string(&123u16), Ok("123".to_owned()));
+    assert_eq!(to_string(&123i16), Ok("123".to_owned()));
+    assert_eq!(to_string(&123u32), Ok("123".to_owned()));
+    assert_eq!(to_string(&123i32), Ok("123".to_owned()));
+    assert_eq!(to_string(&123u64), Ok("123".to_owned()));
+    assert_eq!(to_string(&123i64), Ok("123".to_owned()));
+    assert_eq!(to_string(&123u128), Ok("123".to_owned()));
+    assert_eq!(to_string(&123i128), Ok("123".to_owned()));
+    assert_eq!(to_string(&123.456f32), Ok("123.456".to_owned()));
+    assert_eq!(to_string(&-123.456f32), Ok("-123.456".to_owned()));
+    assert_eq!(to_string(&123.456f64), Ok("123.456".to_owned()));
+    assert_eq!(to_string(&-123.456f64), Ok("-123.456".to_owned()));
     assert_eq!(to_string(&f64::INFINITY), Ok("Infinity".to_owned()));
     assert_eq!(to_string(&-f64::INFINITY), Ok("-Infinity".to_owned()));
     assert_eq!(to_string(&f64::NAN), Ok("NaN".to_owned()));

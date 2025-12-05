@@ -98,10 +98,12 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
     serialize_display!(serialize_u16, u16);
     serialize_display!(serialize_u32, u32);
     serialize_display!(serialize_u64, u64);
+    serialize_display!(serialize_u128, u128);
     serialize_display!(serialize_i8, i8);
     serialize_display!(serialize_i16, i16);
     serialize_display!(serialize_i32, i32);
     serialize_display!(serialize_i64, i64);
+    serialize_display!(serialize_i128, i128);
     serialize_float!(serialize_f32, f32);
     serialize_float!(serialize_f64, f64);
 
@@ -464,10 +466,12 @@ impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
     serialize_quoted!(serialize_u16, u16);
     serialize_quoted!(serialize_u32, u32);
     serialize_quoted!(serialize_u64, u64);
+    serialize_quoted!(serialize_u128, u128);
     serialize_quoted!(serialize_i8, i8);
     serialize_quoted!(serialize_i16, i16);
     serialize_quoted!(serialize_i32, i32);
     serialize_quoted!(serialize_i64, i64);
+    serialize_quoted!(serialize_i128, i128);
     serialize_quoted!(serialize_f32, f32);
     serialize_quoted!(serialize_f64, f64);
 
