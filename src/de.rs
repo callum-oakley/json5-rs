@@ -250,7 +250,7 @@ impl<'de> Deserializer<'de> {
                     .parse_decimal_number(neg, start, offset)
                     .map(|n| (start, n)),
                 Some((_, '0'..='9')) => Err(self.err_at(start, ErrorCode::LeadingZero)),
-                _ => Ok((start, NumberResult::U64(0))),
+                _ => Ok((start, NumberResult::U128(0))),
             },
             (offset, '.' | '1'..='9') => self
                 .parse_decimal_number(neg, start, offset)
@@ -279,10 +279,10 @@ impl<'de> Deserializer<'de> {
             Ok(NumberResult::F64(self.parse_from_str(start, offset)?))
         } else if neg {
             // https://doc.rust-lang.org/std/primitive.i64.html#method.from_str
-            Ok(NumberResult::I64(self.parse_from_str(start, offset)?))
+            Ok(NumberResult::I128(self.parse_from_str(start, offset)?))
         } else {
             // https://doc.rust-lang.org/std/primitive.u64.html#method.from_str
-            Ok(NumberResult::U64(self.parse_from_str(start, offset)?))
+            Ok(NumberResult::U128(self.parse_from_str(start, offset)?))
         }
     }
 
@@ -301,7 +301,7 @@ impl<'de> Deserializer<'de> {
         if !c.is_ascii_hexdigit() {
             return Err(self.err_at(offset, ErrorCode::ExpectedNumber));
         }
-        let mut n = u64::from(c.to_digit(16).expect("c is ascii hexdigit"));
+        let mut n = u128::from(c.to_digit(16).expect("c is ascii hexdigit"));
 
         while let Some((offset, c)) = self.peek()
             && c.is_ascii_hexdigit()
@@ -310,22 +310,22 @@ impl<'de> Deserializer<'de> {
             n = n
                 .checked_mul(16)
                 .and_then(|n| {
-                    n.checked_add(u64::from(c.to_digit(16).expect("c is ascii hexdigit")))
+                    n.checked_add(u128::from(c.to_digit(16).expect("c is ascii hexdigit")))
                 })
                 .ok_or(self.err_at(offset, ErrorCode::OverflowParsingNumber))?;
         }
 
         if neg {
-            // Special case for i64::MIN because -i64::MIN = i64::MAX + 1 doesn't fit in an i64.
-            if n == 0x8000_0000_0000_0000 {
-                Ok(NumberResult::I64(i64::MIN))
+            // Special case for i128::MIN because -i128::MIN = i128::MAX + 1 doesn't fit in an i128.
+            if n == 0x8000_0000_0000_0000_0000_0000_0000_0000 {
+                Ok(NumberResult::I128(i128::MIN))
             } else {
-                Ok(NumberResult::I64(
-                    -i64::try_from(n).map_err(|err| self.custom_err_at(start, err))?,
+                Ok(NumberResult::I128(
+                    -i128::try_from(n).map_err(|err| self.custom_err_at(start, err))?,
                 ))
             }
         } else {
-            Ok(NumberResult::U64(n))
+            Ok(NumberResult::U128(n))
         }
     }
 
@@ -509,8 +509,20 @@ macro_rules! deserialize_number {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
             let (offset, number) = self.parse_number()?;
             match number {
-                NumberResult::U64(u) => visitor.visit_u64(u),
-                NumberResult::I64(i) => visitor.visit_i64(i),
+                NumberResult::U128(u) => {
+                    if let Ok(u) = u64::try_from(u) {
+                        visitor.visit_u64(u)
+                    } else {
+                        visitor.visit_u128(u)
+                    }
+                }
+                NumberResult::I128(i) => {
+                    if let Ok(i) = i64::try_from(i) {
+                        visitor.visit_i64(i)
+                    } else {
+                        visitor.visit_i128(i)
+                    }
+                }
                 NumberResult::F64(f) => visitor.visit_f64(f),
             }
             .map_err(|err| self.with_position(err, offset))
@@ -575,10 +587,12 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     deserialize_number!(deserialize_u16);
     deserialize_number!(deserialize_u32);
     deserialize_number!(deserialize_u64);
+    deserialize_number!(deserialize_u128);
     deserialize_number!(deserialize_i8);
     deserialize_number!(deserialize_i16);
     deserialize_number!(deserialize_i32);
     deserialize_number!(deserialize_i64);
+    deserialize_number!(deserialize_i128);
     deserialize_number!(deserialize_f32);
     deserialize_number!(deserialize_f64);
 
@@ -844,10 +858,12 @@ impl<'de> serde::de::Deserializer<'de> for MapKey<'_, 'de> {
     deserialize_key_from_str!(deserialize_u16, visit_u16);
     deserialize_key_from_str!(deserialize_u32, visit_u32);
     deserialize_key_from_str!(deserialize_u64, visit_u64);
+    deserialize_key_from_str!(deserialize_u128, visit_u128);
     deserialize_key_from_str!(deserialize_i8, visit_i8);
     deserialize_key_from_str!(deserialize_i16, visit_i16);
     deserialize_key_from_str!(deserialize_i32, visit_i32);
     deserialize_key_from_str!(deserialize_i64, visit_i64);
+    deserialize_key_from_str!(deserialize_i128, visit_i128);
     deserialize_key_from_str!(deserialize_f32, visit_f32);
     deserialize_key_from_str!(deserialize_f64, visit_f64);
 
@@ -1031,7 +1047,7 @@ impl Deref for StringResult<'_> {
 }
 
 enum NumberResult {
-    U64(u64),
-    I64(i64),
+    U128(u128),
+    I128(i128),
     F64(f64),
 }

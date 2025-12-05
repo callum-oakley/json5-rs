@@ -53,10 +53,19 @@ fn parse_bool() {
 fn parse_number() {
     assert_eq!(from_str("0"), Ok(0));
     assert!(from_str::<f64>("-0.").is_ok_and(|f| f == 0. && f.is_sign_negative()));
+    assert_eq!(from_str("123"), Ok(123i8));
+    assert_eq!(from_str("123"), Ok(123u8));
+    assert_eq!(from_str("123"), Ok(123i16));
+    assert_eq!(from_str("123"), Ok(123u16));
     assert_eq!(from_str("123"), Ok(123i32));
     assert_eq!(from_str("123"), Ok(123u32));
+    assert_eq!(from_str("123"), Ok(123i64));
+    assert_eq!(from_str("123"), Ok(123u64));
+    assert_eq!(from_str("123"), Ok(123i128));
+    assert_eq!(from_str("123"), Ok(123u128));
     assert_eq!(from_str("-123"), Ok(-123));
-    assert_eq!(from_str("123.456"), Ok(123.456));
+    assert_eq!(from_str("123.456"), Ok(123.456f32));
+    assert_eq!(from_str("123.456"), Ok(123.456f64));
     assert_eq!(from_str("123.0"), Ok(123.));
     assert_eq!(from_str("123."), Ok(123.));
     assert_eq!(from_str(".456"), Ok(0.456));
@@ -73,13 +82,33 @@ fn parse_number() {
     assert_eq!(from_str("0x7FFFFFFFFFFFFFFF"), Ok(i64::MAX));
     assert_eq!(from_str("-0x8000000000000000"), Ok(i64::MIN));
     assert_eq!(from_str("0x0"), Ok(0));
+    assert_eq!(
+        from_str("340282366920938463463374607431768211455"),
+        Ok(u128::MAX)
+    );
+    assert_eq!(
+        from_str("-170141183460469231731687303715884105728"),
+        Ok(i128::MIN)
+    );
+    assert_eq!(
+        from_str("0xffffffffffffffffffffffffffffffff"),
+        Ok(u128::MAX)
+    );
+    assert_eq!(
+        from_str("-0x80000000000000000000000000000000"),
+        Ok(i128::MIN)
+    );
 
     assert_eq!(from_str::<u32>("0x"), Err(err(EofParsingNumber)));
     assert_eq!(from_str::<u32>("0x!"), Err(err_at(0, 2, ExpectedNumber)));
     assert_eq!(from_str::<f64>("inf"), Err(err_at(0, 0, ExpectedNumber)));
     assert_eq!(
         from_str::<u64>("0x10000000000000000"), // u64::MAX + 1
-        Err(err_at(0, 18, OverflowParsingNumber))
+        Err(custom_err_at(
+            0,
+            0,
+            "invalid type: integer `18446744073709551616` as u128, expected u64"
+        ))
     );
     assert_eq!(
         from_str::<u32>("007"),
@@ -90,7 +119,7 @@ fn parse_number() {
         Err(custom_err_at(
             0,
             0,
-            "number too large to fit in target type"
+            "invalid type: integer `18446744073709551616` as u128, expected u64"
         ))
     );
     assert_eq!(
@@ -103,6 +132,34 @@ fn parse_number() {
     );
     assert_eq!(
         from_str::<i64>("-0x8000000000000001"), // i64::MIN - 1
+        Err(custom_err_at(
+            0,
+            0,
+            "invalid type: integer `-9223372036854775809` as i128, expected i64"
+        ))
+    );
+    assert_eq!(
+        from_str::<i64>("340282366920938463463374607431768211456"), // u128::MAX + 1
+        Err(custom_err_at(
+            0,
+            0,
+            "number too large to fit in target type"
+        ))
+    );
+    assert_eq!(
+        from_str::<i64>("-170141183460469231731687303715884105729"), // i128::MIN - 1
+        Err(custom_err_at(
+            0,
+            0,
+            "number too small to fit in target type"
+        ))
+    );
+    assert_eq!(
+        from_str::<u128>("0x100000000000000000000000000000000"), // u128::MAX + 1
+        Err(err_at(0, 34, OverflowParsingNumber))
+    );
+    assert_eq!(
+        from_str::<i128>("-0x80000000000000000000000000000001"), // i128::MIN - 1
         Err(custom_err_at(
             0,
             0,
