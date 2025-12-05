@@ -44,12 +44,72 @@ pub fn from_str<'de, T: Deserialize<'de>>(input: &'de str) -> Result<T> {
         None => Ok(t),
     }
 }
+/// Parse a JSON5 string with custom deserializer options.
+///
+/// This function allows you to specify [`DeserializerOptions`] to control parsing behavior,
+/// such as allowing line terminators inside string literals.
+///
+/// # Example
+/// ```
+/// use json5::{DeserializerOptions, from_str_with_options};
+/// use serde_derive::Deserialize;
+///
+/// #[derive(Debug, PartialEq, Deserialize)]
+/// struct Config<'a> {
+///     foo: u32,
+///     bar: &'a str,
+/// }
+///
+/// let options = DeserializerOptions {
+///     allow_line_terminators_in_strings: true,
+///     strip_line_terminators_from_keys: false,
+/// };
+/// let config: Config = from_str_with_options("
+///   {
+///     foo: 42,
+///     bar: 'multi
+/// line'
+///   }
+/// ", options)?;
+///
+/// assert_eq!(config, Config{ foo: 42, bar: "multi\nline" });
+/// # Ok::<(), json5::Error>(())
+/// ```
+///
+/// # Errors
+/// Fails if the JSON5 is malformed or we can't map it to a `T`.
+pub fn from_str_with_options<'de, T: Deserialize<'de>>(input: &'de str, options: DeserializerOptions) -> Result<T> {
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let t = T::deserialize(&mut deserializer)?;
+    deserializer.skip_whitespace()?;
+    match deserializer.peek() {
+        Some((offset, _)) => Err(deserializer.err_at(offset, ErrorCode::TrailingCharacters)),
+        None => Ok(t),
+    }
+}
+
+/// Configuration options for the JSON5 deserializer.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DeserializerOptions {
+    /// Whether to allow line terminators (U+000A, U+000D, U+2028, U+2029) inside string literals.
+    /// If `false` (the default), encountering a line terminator in a string results in an error.
+    /// If `true`, line terminators are treated as regular characters and included in the string.
+    pub allow_line_terminators_in_strings: bool,
+    /// Whether to strip line terminators from object keys after parsing.
+    /// If `true`, any line terminator characters (U+000A, U+000D, U+2028, U+2029) present in a key
+    /// string are removed, resulting in a key without those characters.
+    /// When this option is `true`, `allow_line_terminators_in_strings` is automatically set to `true`
+    /// (even if it was `false`), because line terminators must be allowed in order to be stripped.
+    /// Default is `false`.
+    pub strip_line_terminators_from_keys: bool,
+}
 
 /// A deserializer that knows how to parse JSON5 and map it on to types implementing
 /// [`Deserialize`].
 pub struct Deserializer<'de> {
     input: &'de str,
     char_indices: Peekable<CharIndices<'de>>,
+    options: DeserializerOptions,
 }
 
 impl<'de> Deserializer<'de> {
@@ -60,9 +120,21 @@ impl<'de> Deserializer<'de> {
     )]
     #[must_use]
     pub fn from_str(input: &'de str) -> Self {
+        Self::from_str_with_options(input, DeserializerOptions::default())
+    }
+
+    /// Construct a deserializer with custom options.
+    #[must_use]
+    pub fn from_str_with_options(input: &'de str, options: DeserializerOptions) -> Self {
+        let mut options = options;
+        // If stripping line terminators from keys is enabled, we must also allow them in strings.
+        if options.strip_line_terminators_from_keys {
+            options.allow_line_terminators_in_strings = true;
+        }
         Self {
             input,
             char_indices: input.char_indices().peekable(),
+            options,
         }
     }
 }
@@ -353,8 +425,8 @@ impl<'de> Deserializer<'de> {
                     return Ok(StringResult::Owned(owned));
                 }
                 return Ok(StringResult::Borrowed(&self.input[start..offset]));
-            } else if c == '\u{000A}' || c == '\u{000D}' {
-                // LineTerminator is forbidden except U+2028 and U+2029 are explicitly allowed.
+            } else if !self.options.allow_line_terminators_in_strings && matches!(c, '\u{000A}' | '\u{000D}') {
+                // U+2028 and U+2029 are allowed even without the option.
                 return Err(self.err_at(offset, ErrorCode::LineTerminatorInString));
             } else if c == '\\' {
                 let owned = owned.get_or_insert(self.input[start..offset].to_owned());
@@ -422,9 +494,35 @@ impl<'de> Deserializer<'de> {
     fn parse_key(&mut self) -> Result<(usize, StringResult<'de>)> {
         self.skip_whitespace()?;
 
-        match self.peek_or(ErrorCode::EofParsingObject)? {
-            (_, '"' | '\'') => self.parse_string(),
-            (offset, _) => self.parse_identifier().map(|i| (offset, i)),
+        let (offset, result) = match self.peek_or(ErrorCode::EofParsingObject)? {
+            (_, '"' | '\'') => self.parse_string()?,
+            (offset, _) => {
+                let result = self.parse_identifier()?;
+                (offset, result)
+            }
+        };
+        Ok((offset, self.strip_line_terminators_from_key(result)))
+    }
+    fn strip_line_terminators_from_key(&self, s: StringResult<'de>) -> StringResult<'de> {
+        if !self.options.strip_line_terminators_from_keys {
+            return s;
+        }
+        match s {
+            StringResult::Borrowed(borrowed) => {
+                if borrowed.chars().any(crate::char::is_json5_line_terminator) {
+                    let owned = borrowed
+                        .chars()
+                        .filter(|&c| !crate::char::is_json5_line_terminator(c))
+                        .collect();
+                    StringResult::Owned(owned)
+                } else {
+                    StringResult::Borrowed(borrowed)
+                }
+            }
+            StringResult::Owned(mut owned) => {
+                owned.retain(|c| !crate::char::is_json5_line_terminator(c));
+                StringResult::Owned(owned)
+            }
         }
     }
 

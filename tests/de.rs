@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use json5::{Error, ErrorCode, Position, from_str};
+use json5::{Deserializer, DeserializerOptions, Error, ErrorCode, Position, from_str};
 
 use ErrorCode::*;
 use serde_bytes::ByteBuf;
@@ -222,6 +222,136 @@ fn parse_array() {
         from_str::<Vec<i32>>("[ , ]"),
         Err(err_at(0, 2, ExpectedNumber))
     );
+}
+
+#[test]
+fn parse_string_line_terminators_default() {
+    // By default, line terminators (U+000A, U+000D) in strings are errors.
+    assert_eq!(
+        from_str::<String>("'one\ntwo'"),
+        Err(err_at(0, 4, LineTerminatorInString))
+    );
+    assert_eq!(
+        from_str::<String>("'one\rtwo'"),
+        Err(err_at(0, 4, LineTerminatorInString))
+    );
+    // However, U+2028 and U+2029 are allowed (they are not considered line terminators for strings).
+    assert_eq!(
+        from_str::<String>("'one\u{2028}two'"),
+        Ok("one\u{2028}two".to_owned())
+    );
+    assert_eq!(
+        from_str::<String>("'one\u{2029}two'"),
+        Ok("one\u{2029}two".to_owned())
+    );
+    // Line terminators in keys also cause errors.
+    assert_eq!(
+        from_str::<HashMap<String, u32>>("{ 'key\n': 42 }"),
+        Err(err_at(0, 6, LineTerminatorInString))
+    );
+}
+
+#[test]
+fn parse_string_line_terminators_allowed() {
+    // With allow_line_terminators_in_strings = true, line terminators are accepted.
+    let options = DeserializerOptions {
+        allow_line_terminators_in_strings: true,
+        strip_line_terminators_from_keys: false,
+    };
+    let input = "'one\ntwo'";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let s: String = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(s, "one\ntwo");
+
+    // CR
+    let input = "'one\rtwo'";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let s: String = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(s, "one\rtwo");
+
+    // U+2028
+    let input = "'one\u{2028}two'";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let s: String = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(s, "one\u{2028}two");
+
+    // U+2029
+    let input = "'one\u{2029}two'";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let s: String = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(s, "one\u{2029}two");
+
+    // In keys
+    let input = "{ 'key\n': 42 }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let map: HashMap<String, u32> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("key\n".to_owned(), 42)]));
+
+    // Mixed line terminators
+    let input = r#"'line1\nline2'"#; // escaped newline is still a newline character after escape
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let s: String = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(s, "line1\nline2");
+}
+#[test]
+fn parse_string_line_terminators_strip_keys() {
+    // With allow_line_terminators_in_strings = true and strip_line_terminators_from_keys = true,
+    // line terminators in keys are removed.
+    let options = DeserializerOptions {
+        allow_line_terminators_in_strings: true,
+        strip_line_terminators_from_keys: true,
+    };
+    // LF in key
+    let input = "{ 'key\n': 42 }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let map: HashMap<String, u32> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("key".to_owned(), 42)]));
+
+    // CR in key
+    let input = "{ 'key\r': 43 }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let map: HashMap<String, u32> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("key".to_owned(), 43)]));
+
+    // U+2028 in key
+    let input = "{ 'key\u{2028}': 44 }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let map: HashMap<String, u32> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("key".to_owned(), 44)]));
+
+    // U+2029 in key
+    let input = "{ 'key\u{2029}': 45 }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let map: HashMap<String, u32> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("key".to_owned(), 45)]));
+
+    // Multiple line terminators
+    let input = "{ 'key\n\r\u{2028}\u{2029}': 46 }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let map: HashMap<String, u32> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("key".to_owned(), 46)]));
+
+    // Line terminators in middle of key
+    let input = "{ 'k\ne\ry': 47 }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let map: HashMap<String, u32> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("key".to_owned(), 47)]));
+
+    // Line terminators in value should remain unchanged (since stripping only applies to keys)
+    let input = "{ 'k': 'value\n' }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options);
+    let map: HashMap<String, String> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("k".to_owned(), "value\n".to_owned())]));
+
+    // With strip_line_terminators_from_keys = false, they are kept
+    let options_no_strip = DeserializerOptions {
+        allow_line_terminators_in_strings: true,
+        strip_line_terminators_from_keys: false,
+    };
+    let input = "{ 'key\n': 42 }";
+    let mut deserializer = Deserializer::from_str_with_options(input, options_no_strip);
+    let map: HashMap<String, u32> = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+    assert_eq!(map, HashMap::from([("key\n".to_owned(), 42)]));
 }
 
 // https://spec.json5.org/#objects

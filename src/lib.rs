@@ -54,6 +54,25 @@
 //! into a struct with `snake_case` fields). See the Serde docs, especially the [Attributes][],
 //! [Custom serialization][], and [Examples][] sections.
 //!
+//! ## Configuration
+//!
+//! The [`DeserializerOptions`] struct allows you to adjust parsing behavior. For example, you can
+//! allow line terminators (newlines) inside string literals, which is normally a syntax error:
+//!
+//! ```
+//! use json5::{Deserializer, DeserializerOptions};
+//!
+//! let options = DeserializerOptions {
+//!     allow_line_terminators_in_strings: true,
+//!     strip_line_terminators_from_keys: false,
+//! };
+//! let mut deserializer = Deserializer::from_str_with_options(r#"'multi
+//! line
+//! string'"#, options);
+//! let s: String = serde::Deserialize::deserialize(&mut deserializer).unwrap();
+//! assert_eq!(s, "multi\nline\nstring");
+//! ```
+//!
 //! # Serialization
 //!
 //! Similarly, implementing [`serde::Serialize`] on a Rust type allows you to produce a JSON5
@@ -121,6 +140,6 @@ mod ser;
 #[allow(clippy::all, clippy::pedantic, dead_code)]
 mod unicode;
 
-pub use de::{Deserializer, from_str};
+pub use de::{Deserializer, DeserializerOptions, from_str, from_str_with_options};
 pub use error::{Error, ErrorCode, Position};
 pub use ser::{Serializer, to_string, to_writer};
