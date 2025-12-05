@@ -104,6 +104,19 @@ assert_eq!(&s, "\"4a534f4e35\"");
 assert_eq!(json5::from_str::<ByteBuf>(&s)?, ByteBuf::from("JSON5"));
 ```
 
+## Project goals and non-goals
+
+- Goal: Strict adherence to [the specification][]. If you find some way the implementation deviates
+  from the spec then please open an issue!
+- Non-goal: I'm not interested in supporting extensions or relaxations of the spec, even if they're
+  gated behind an option. It comes at the cost of code complexity and expands the scope of the
+  project to "anything that looks a bit like JSON5".
+- Goal: "Reasonable" performance given the target use case of deserializing configuration files (not
+  e.g. message passing).
+- Non-goal: Performance in line with [serde-rs/json][]. Lots of work has gone in to making Serde
+  JSON as fast as it is. I'm content to have a simpler codebase and sacrifice some performance (e.g.
+  by working with chars instead of bytes).
+
 [Attributes]: https://serde.rs/attributes.html
 [Custom serialization]: https://serde.rs/custom-serialization.html
 [ECMAScript 5.1]: https://www.ecma-international.org/ecma-262/5.1/
@@ -113,3 +126,4 @@ assert_eq!(json5::from_str::<ByteBuf>(&s)?, ByteBuf::from("JSON5"));
 [Serde data model]: https://serde.rs/data-model.html#types
 [Serde framework]: https://serde.rs/
 [serde-rs/json]: https://github.com/serde-rs/json
+[the specification]: https://spec.json5.org/
