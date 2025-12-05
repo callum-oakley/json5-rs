@@ -117,6 +117,10 @@ assert_eq!(json5::from_str::<ByteBuf>(&s)?, ByteBuf::from("JSON5"));
   JSON as fast as it is. I'm content to have a simpler codebase and sacrifice some performance (e.g.
   by working with chars instead of bytes).
 
+## Contributing
+
+Please open an issue rather than a pull request.
+
 [Attributes]: https://serde.rs/attributes.html
 [Custom serialization]: https://serde.rs/custom-serialization.html
 [ECMAScript 5.1]: https://www.ecma-international.org/ecma-262/5.1/
