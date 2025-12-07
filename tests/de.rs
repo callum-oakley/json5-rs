@@ -183,6 +183,8 @@ fn parse_string() {
     assert_eq!(from_str("'one \\\r\nline'"), Ok("one line".to_owned()));
     assert_eq!(from_str(r#""zero: '\0'""#), Ok("zero: '\0'".to_owned()));
     assert_eq!(from_str(r#"'\u4f60\u597d\x21'"#), Ok("你好!".to_owned()));
+    // Example 2 from https://spec.json5.org/#escapes, UTF-16 surrogate pair.
+    assert_eq!(from_str(r"'\uD83C\uDFBC'"), Ok("🎼".to_owned()));
     assert_eq!(from_str(r#""\uD83D\uDE00""#), Ok("😀".to_owned()));
 
     assert_eq!(
@@ -199,15 +201,15 @@ fn parse_string() {
     );
     assert_eq!(
         from_str::<String>(r#"'\01'"#),
-        Err(err_at(0, 3, InvalidEscapeSequence))
+        Err(err_at(0, 1, InvalidEscapeSequence))
     );
     assert_eq!(
         from_str::<String>(r#"'\42'"#),
-        Err(err_at(0, 2, InvalidEscapeSequence))
+        Err(err_at(0, 1, InvalidEscapeSequence))
     );
     assert_eq!(
         from_str::<String>(r#"'\ubar'"#),
-        Err(err_at(0, 5, InvalidEscapeSequence))
+        Err(err_at(0, 1, InvalidEscapeSequence))
     );
     assert_eq!(
         from_str::<String>("false"),
@@ -255,22 +257,22 @@ fn parse_string() {
     // High surrogate followed by invalid low surrogate (out of range)
     assert_eq!(
         from_str::<String>(r#""\uD83D\uD800""#),
-        Err(err_at(0, 9, InvalidEscapeSequence))
+        Err(custom_err_at(0, 1, "unpaired surrogate found: d83d"))
     );
     // High surrogate followed by value outside surrogate range
     assert_eq!(
         from_str::<String>(r#""\uD83D\u0041""#),
-        Err(err_at(0, 9, InvalidEscapeSequence))
+        Err(custom_err_at(0, 1, "unpaired surrogate found: d83d"))
     );
     // Low surrogate appearing alone (not after high surrogate)
     assert_eq!(
         from_str::<String>(r#""\uDE00""#),
-        Err(err_at(0, 2, InvalidEscapeSequence))
+        Err(err_at(0, 7, InvalidEscapeSequence))
     );
     // Multiple high surrogates without low surrogates
     assert_eq!(
         from_str::<String>(r#""\uD83D\uD83D""#),
-        Err(err_at(0, 9, InvalidEscapeSequence))
+        Err(custom_err_at(0, 1, "unpaired surrogate found: d83d"))
     );
 }
 

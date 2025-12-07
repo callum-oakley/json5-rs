@@ -358,7 +358,7 @@ impl<'de> Deserializer<'de> {
                 return Err(self.err_at(offset, ErrorCode::LineTerminatorInString));
             } else if c == '\\' {
                 let owned = owned.get_or_insert(self.input[start..offset].to_owned());
-                if let Some(c) = self.parse_escape_sequence()? {
+                if let Some(c) = self.parse_escape_sequence(offset)? {
                     owned.push(c);
                 }
             } else if let Some(owned) = &mut owned {
@@ -368,8 +368,8 @@ impl<'de> Deserializer<'de> {
     }
 
     // https://262.ecma-international.org/5.1/#sec-7.8.4
-    fn parse_escape_sequence(&mut self) -> Result<Option<char>> {
-        let (offset, c) = self.next_or(ErrorCode::EofParsingEscapeSequence)?;
+    fn parse_escape_sequence(&mut self, offset: usize) -> Result<Option<char>> {
+        let (_, c) = self.next_or(ErrorCode::EofParsingEscapeSequence)?;
         match c {
             // LineTerminatorSequence
             _ if crate::char::is_json5_line_terminator(c) => {
@@ -388,9 +388,7 @@ impl<'de> Deserializer<'de> {
             'r' => Ok(Some('\u{000D}')),
 
             '0' => {
-                if let Some((offset, c)) = self.peek()
-                    && c.is_ascii_digit()
-                {
+                if self.peek().is_some_and(|(_, c)| c.is_ascii_digit()) {
                     return Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence));
                 }
                 Ok(Some('\u{0000}'))
@@ -406,67 +404,53 @@ impl<'de> Deserializer<'de> {
         }
     }
 
-    fn parse_hex_escape_sequence_value(&mut self, length: usize) -> Result<(usize, u32)> {
+    fn parse_hex_escape_sequence(&mut self, offset: usize) -> Result<char> {
+        char::try_from(self.parse_escape_sequence_digits(offset, 2)?)
+            .map_err(|err| self.custom_err_at(offset, err))
+    }
+
+    fn parse_unicode_escape_sequence(&mut self, offset: usize) -> Result<char> {
+        let a = self.parse_escape_sequence_digits(offset, 4)?;
+        if let Ok(c) = char::try_from(a) {
+            return Ok(c);
+        }
+
+        // "To escape an extended character that is not in the Basic Multilingual Plane, the
+        // character is represented as a 12-character sequence, encoding the UTF-16 surrogate pair."
+        // – https://spec.json5.org/#escapes
+        self.expect_str(
+            "\\u",
+            ErrorCode::EofParsingEscapeSequence,
+            ErrorCode::InvalidEscapeSequence,
+        )?;
+        let b = self.parse_escape_sequence_digits(offset, 4)?;
+
+        let mut chars = char::decode_utf16([
+            u16::try_from(a).map_err(|err| self.custom_err_at(offset, err))?,
+            u16::try_from(b).map_err(|err| self.custom_err_at(offset, err))?,
+        ]);
+        let c = chars
+            .next()
+            .ok_or_else(|| self.err_at(offset, ErrorCode::InvalidEscapeSequence))?
+            .map_err(|err| self.custom_err_at(offset, err))?;
+
+        if chars.next().is_none() {
+            Ok(c)
+        } else {
+            Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence))
+        }
+    }
+
+    fn parse_escape_sequence_digits(&mut self, offset: usize, length: usize) -> Result<u32> {
         let mut value = 0;
-        let mut value_offset = 0;
-        for i in 0..length {
-            let (offset, c) = self.next_or(ErrorCode::EofParsingEscapeSequence)?;
-            if i == 0 {
-                value_offset = offset;
-            }
+        for _ in 0..length {
+            let (_, c) = self.next_or(ErrorCode::EofParsingEscapeSequence)?;
             if !c.is_ascii_hexdigit() {
                 return Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence));
             }
             value = value * 16 + c.to_digit(16).expect("c.is_ascii_hexdigit");
         }
-        Ok((value_offset, value))
-    }
-
-    fn parse_hex_escape_sequence(&mut self, starting_offset: usize) -> Result<char> {
-        let (_, value) = self.parse_hex_escape_sequence_value(2)?;
-
-        match char::try_from(value) {
-            Ok(v) => Ok(v),
-            Err(_) => Err(self.err_at(starting_offset, ErrorCode::InvalidEscapeSequence)),
-        }
-    }
-
-    fn parse_unicode_escape_sequence(&mut self, starting_offset: usize) -> Result<char> {
-        // Parse the first escape and see if it is a high surrogate.
-        let (_, high_escape_value) = self.parse_hex_escape_sequence_value(4)?;
-
-        if high_escape_value < 0xD800 || high_escape_value > 0xDBFF {
-            return match char::try_from(high_escape_value) {
-                Ok(v) => Ok(v),
-                Err(_) => Err(self.err_at(starting_offset, ErrorCode::InvalidEscapeSequence)),
-            };
-        }
-
-        // It's a high surrogate, expecting a low surrogate next.
-
-        self.expect_char(
-            '\\',
-            ErrorCode::InvalidEscapeSequence,
-            ErrorCode::InvalidEscapeSequence,
-        )?;
-        self.expect_char(
-            'u',
-            ErrorCode::InvalidEscapeSequence,
-            ErrorCode::InvalidEscapeSequence,
-        )?;
-
-        let (offset, low_escape_value) = self.parse_hex_escape_sequence_value(4)?;
-        if low_escape_value < 0xDC00 || low_escape_value > 0xDFFF {
-            return Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence));
-        }
-
-        let codepoint =
-            0x10000 + ((high_escape_value - 0xD800) << 10) + (low_escape_value - 0xDC00);
-
-        match char::try_from(codepoint) {
-            Ok(v) => Ok(v),
-            Err(_) => Err(self.err_at(starting_offset, ErrorCode::InvalidEscapeSequence)),
-        }
+        Ok(value)
     }
 
     // https://spec.json5.org/#objects
