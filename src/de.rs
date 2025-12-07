@@ -398,24 +398,75 @@ impl<'de> Deserializer<'de> {
 
             '1'..'9' => Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence)),
 
-            'x' => Ok(Some(self.parse_hex_escape_sequence(2)?)),
+            'x' => Ok(Some(self.parse_hex_escape_sequence(offset)?)),
 
-            'u' => Ok(Some(self.parse_hex_escape_sequence(4)?)),
+            'u' => Ok(Some(self.parse_unicode_escape_sequence(offset)?)),
 
             c => Ok(Some(c)),
         }
     }
 
-    fn parse_hex_escape_sequence(&mut self, length: usize) -> Result<char> {
+    fn parse_hex_escape_sequence_value(&mut self, length: usize) -> Result<(usize, u32)> {
         let mut value = 0;
-        for _ in 0..length {
+        let mut value_offset = 0;
+        for i in 0..length {
             let (offset, c) = self.next_or(ErrorCode::EofParsingEscapeSequence)?;
+            if i == 0 {
+                value_offset = offset;
+            }
             if !c.is_ascii_hexdigit() {
                 return Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence));
             }
             value = value * 16 + c.to_digit(16).expect("c.is_ascii_hexdigit");
         }
-        Ok(char::try_from(value).expect("escape sequence isn't long enough to overflow a char"))
+        Ok((value_offset, value))
+    }
+
+    fn parse_hex_escape_sequence(&mut self, starting_offset: usize) -> Result<char> {
+        let (_, value) = self.parse_hex_escape_sequence_value(2)?;
+
+        match char::try_from(value) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(self.err_at(starting_offset, ErrorCode::InvalidEscapeSequence)),
+        }
+    }
+
+    fn parse_unicode_escape_sequence(&mut self, starting_offset: usize) -> Result<char> {
+        // Parse the first escape and see if it is a high surrogate.
+        let (_, high_escape_value) = self.parse_hex_escape_sequence_value(4)?;
+
+        if high_escape_value < 0xD800 || high_escape_value > 0xDBFF {
+            return match char::try_from(high_escape_value) {
+                Ok(v) => Ok(v),
+                Err(_) => Err(self.err_at(starting_offset, ErrorCode::InvalidEscapeSequence)),
+            };
+        }
+
+        // It's a high surrogate, expecting a low surrogate next.
+
+        self.expect_char(
+            '\\',
+            ErrorCode::InvalidEscapeSequence,
+            ErrorCode::InvalidEscapeSequence,
+        )?;
+        self.expect_char(
+            'u',
+            ErrorCode::InvalidEscapeSequence,
+            ErrorCode::InvalidEscapeSequence,
+        )?;
+
+        let (offset, low_escape_value) = self.parse_hex_escape_sequence_value(4)?;
+        if low_escape_value < 0xDC00 || low_escape_value > 0xDFFF {
+            return Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence));
+        }
+
+        let codepoint =
+            0x10000 + ((high_escape_value - 0xD800) << 10) + (low_escape_value - 0xDC00);
+
+        match char::try_from(codepoint) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(self.err_at(starting_offset, ErrorCode::InvalidEscapeSequence)),
+        }
     }
 
     // https://spec.json5.org/#objects
@@ -444,7 +495,7 @@ impl<'de> Deserializer<'de> {
                     ErrorCode::EofParsingIdentifier,
                     ErrorCode::InvalidEscapeSequence,
                 )?;
-                let c = self.parse_hex_escape_sequence(4)?;
+                let c = self.parse_unicode_escape_sequence(offset)?;
                 if offset == start {
                     if !crate::char::is_json5_identifier_start(c) {
                         return Err(self.err_at(offset, ErrorCode::ExpectedIdentifier));

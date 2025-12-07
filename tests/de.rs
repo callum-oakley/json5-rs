@@ -183,6 +183,7 @@ fn parse_string() {
     assert_eq!(from_str("'one \\\r\nline'"), Ok("one line".to_owned()));
     assert_eq!(from_str(r#""zero: '\0'""#), Ok("zero: '\0'".to_owned()));
     assert_eq!(from_str(r#"'\u4f60\u597d\x21'"#), Ok("你好!".to_owned()));
+    assert_eq!(from_str(r#""\uD83D\uDE00""#), Ok("😀".to_owned()));
 
     assert_eq!(
         from_str::<char>(r#"'ab'"#),
@@ -228,6 +229,48 @@ fn parse_string() {
             0,
             "invalid value: string \"ab\", expected a character"
         ))
+    );
+
+    // UTF-16 surrogate pair error cases
+    // High surrogate without low surrogate
+    assert_eq!(
+        from_str::<String>(r#""\uD83D""#),
+        Err(err_at(0, 7, InvalidEscapeSequence))
+    );
+    // High surrogate followed by non-escape character
+    assert_eq!(
+        from_str::<String>(r#""\uD83Dx""#),
+        Err(err_at(0, 7, InvalidEscapeSequence))
+    );
+    // High surrogate followed by invalid escape sequence
+    assert_eq!(
+        from_str::<String>(r#""\uD83D\x41""#),
+        Err(err_at(0, 8, InvalidEscapeSequence))
+    );
+    // High surrogate followed by non-unicode escape
+    assert_eq!(
+        from_str::<String>(r#""\uD83D\n""#),
+        Err(err_at(0, 8, InvalidEscapeSequence))
+    );
+    // High surrogate followed by invalid low surrogate (out of range)
+    assert_eq!(
+        from_str::<String>(r#""\uD83D\uD800""#),
+        Err(err_at(0, 9, InvalidEscapeSequence))
+    );
+    // High surrogate followed by value outside surrogate range
+    assert_eq!(
+        from_str::<String>(r#""\uD83D\u0041""#),
+        Err(err_at(0, 9, InvalidEscapeSequence))
+    );
+    // Low surrogate appearing alone (not after high surrogate)
+    assert_eq!(
+        from_str::<String>(r#""\uDE00""#),
+        Err(err_at(0, 2, InvalidEscapeSequence))
+    );
+    // Multiple high surrogates without low surrogates
+    assert_eq!(
+        from_str::<String>(r#""\uD83D\uD83D""#),
+        Err(err_at(0, 9, InvalidEscapeSequence))
     );
 }
 
