@@ -26,6 +26,13 @@ fn criterion_benchmark(c: &mut Criterion) {
             },
         );
         group.bench_with_input(
+            BenchmarkId::new("serde-rs/json", file),
+            &input,
+            |b, input| {
+                b.iter(|| serde_json::from_str::<Value>(input).unwrap());
+            },
+        );
+        group.bench_with_input(
             BenchmarkId::new("spyoungtech/json-five-rs", file),
             &input,
             |b, input| {
@@ -37,13 +44,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             &input,
             |b, input| {
                 b.iter(|| serde_json5::from_str::<Value>(input).unwrap());
-            },
-        );
-        group.bench_with_input(
-            BenchmarkId::new("serde-rs/json", file),
-            &input,
-            |b, input| {
-                b.iter(|| serde_json::from_str::<Value>(input).unwrap());
             },
         );
     }

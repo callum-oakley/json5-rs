@@ -111,12 +111,12 @@ There's a [criterion][] benchmark in [benches](benches) comparing performance ag
 fork of an earlier version of this library). Throughput on my machine at the time of writing is
 summarised below. Higher is better.
 
-| Library | small | medium | large |
-|---------|-------|--------|-------|
-| serde-rs/json | 513.51 MiB/s | 519.16 MiB/s | 511.84 MiB/s |
-| callum-oakley/json5-rs | 227.47 MiB/s | 220.99 MiB/s | 224.51 MiB/s |
+| crate                    | small        | medium       | large        |
+|--------------------------|--------------|--------------|--------------|
+| serde-rs/json            | 513.51 MiB/s | 519.16 MiB/s | 511.84 MiB/s |
+| callum-oakley/json5-rs   | 227.47 MiB/s | 220.99 MiB/s | 224.51 MiB/s |
 | spyoungtech/json-five-rs | 105.36 MiB/s | 107.08 MiB/s | 106.45 MiB/s |
-| google/serde_json5 | 11.500 MiB/s | 11.581 MiB/s | 10.438 MiB/s |
+| google/serde_json5       | 11.500 MiB/s | 11.581 MiB/s | 10.438 MiB/s |
 
 ![](./benches/throughput.svg)
 
