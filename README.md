@@ -104,6 +104,22 @@ assert_eq!(&s, "\"4a534f4e35\"");
 assert_eq!(json5::from_str::<ByteBuf>(&s)?, ByteBuf::from("JSON5"));
 ```
 
+## Benchmarks
+
+There's a [criterion][] benchmark in [benches](benches) comparing performance against
+[serde-rs/json][], [spyoungtech/json-five-rs][], and [google/serde_json5][] (which is based on a
+fork of an earlier version of this library). Throughput on my machine at the time of writing is
+summarised below. Higher is better.
+
+| Library | small | medium | large |
+|---------|-------|--------|-------|
+| serde-rs/json | 513.51 MiB/s | 519.16 MiB/s | 511.84 MiB/s |
+| callum-oakley/json5-rs | 227.47 MiB/s | 220.99 MiB/s | 224.51 MiB/s |
+| spyoungtech/json-five-rs | 105.36 MiB/s | 107.08 MiB/s | 106.45 MiB/s |
+| google/serde_json5 | 11.500 MiB/s | 11.581 MiB/s | 10.438 MiB/s |
+
+![](./benches/throughput.svg)
+
 ## Project goals and non-goals
 
 - Goal: Strict adherence to [the specification][]. If you find some way the implementation deviates
@@ -122,12 +138,15 @@ assert_eq!(json5::from_str::<ByteBuf>(&s)?, ByteBuf::from("JSON5"));
 Please open an issue rather than a pull request.
 
 [Attributes]: https://serde.rs/attributes.html
+[criterion]: https://github.com/criterion-rs/criterion.rs
 [Custom serialization]: https://serde.rs/custom-serialization.html
 [ECMAScript 5.1]: https://www.ecma-international.org/ecma-262/5.1/
 [Examples]: https://serde.rs/examples.html
+[google/serde_json5]: https://github.com/google/serde_json5
 [JSON]: https://www.json.org/json-en.html
 [JSON5]: https://json5.org/
 [Serde data model]: https://serde.rs/data-model.html#types
 [Serde framework]: https://serde.rs/
 [serde-rs/json]: https://github.com/serde-rs/json
+[spyoungtech/json-five-rs]: https://github.com/spyoungtech/json-five-rs
 [the specification]: https://spec.json5.org/
