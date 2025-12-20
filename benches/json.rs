@@ -5,6 +5,7 @@ use criterion::{
 use serde_json::Value;
 
 fn criterion_benchmark(c: &mut Criterion) {
+    // JSON strings to deserialize
     let data = ["small.json", "medium.json", "large.json"].map(|file| {
         (
             file,
@@ -12,7 +13,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         )
     });
 
-    let mut group = c.benchmark_group("from_str");
+    let mut group = c.benchmark_group("json");
     group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
 
     for (file, input) in data {

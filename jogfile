@@ -1,0 +1,9 @@
+setup-benches
+  dir="benches/data"
+  rm -rf "${dir}"
+  mkdir -p "${dir}"
+  cd "${dir}" || exit
+
+  curl -fsSLo small.json 'https://api.github.com/repos/callum-oakley/json5-rs/commits?per_page=1'
+  curl -fsSLo medium.json 'https://api.github.com/repos/callum-oakley/json5-rs/commits?per_page=10'
+  curl -fsSLo large.json 'https://api.github.com/repos/callum-oakley/json5-rs/commits?per_page=100'
