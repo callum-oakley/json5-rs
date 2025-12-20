@@ -665,3 +665,114 @@ fn chromium_example() {
         Ok(serde_json::Value::String("stable".to_owned()))
     );
 }
+
+#[test]
+// https://serde.rs/enum-representations.html
+fn enum_representations() {
+    // https://serde.rs/enum-representations.html#externally-tagged
+    {
+        #[derive(PartialEq, Debug, Deserialize)]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: String, method: String },
+            #[serde(rename = "res")]
+            Response { id: String, result: () },
+        }
+
+        assert_eq!(
+            from_str("{ req: { id: \"0\", method: \"post\" } }"),
+            Ok(Message::Request {
+                id: "0".to_owned(),
+                method: "post".to_owned()
+            }),
+        );
+        assert_eq!(
+            from_str("{ res: { id: \"0\", result: null, } }"),
+            Ok(Message::Response {
+                id: "0".to_owned(),
+                result: (),
+            }),
+        );
+    }
+
+    // https://serde.rs/enum-representations.html#internally-tagged
+    {
+        #[derive(PartialEq, Debug, Deserialize)]
+        #[serde(tag = "type")]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: String, method: String },
+            #[serde(rename = "res")]
+            Response { id: String, result: () },
+        }
+
+        assert_eq!(
+            from_str("{ type: \"req\", id: \"0\", method: \"post\" }"),
+            Ok(Message::Request {
+                id: "0".to_owned(),
+                method: "post".to_owned()
+            }),
+        );
+        assert_eq!(
+            from_str("{ type: \"res\", id: \"0\", result: null }"),
+            Ok(Message::Response {
+                id: "0".to_owned(),
+                result: (),
+            }),
+        );
+    }
+
+    // https://serde.rs/enum-representations.html#adjacently-tagged
+    {
+        #[derive(PartialEq, Debug, Deserialize)]
+        #[serde(tag = "type", content = "value")]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: String, method: String },
+            #[serde(rename = "res")]
+            Response { id: String, result: () },
+        }
+
+        assert_eq!(
+            from_str("{ type: \"req\", value: { id: \"0\", method: \"post\" } }"),
+            Ok(Message::Request {
+                id: "0".to_owned(),
+                method: "post".to_owned()
+            }),
+        );
+        assert_eq!(
+            from_str("{ type: \"res\", value: { id: \"0\", result: null } }"),
+            Ok(Message::Response {
+                id: "0".to_owned(),
+                result: (),
+            }),
+        );
+    }
+
+    // https://serde.rs/enum-representations.html#untagged
+    {
+        #[derive(PartialEq, Debug, Deserialize)]
+        #[serde(untagged)]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: String, method: String },
+            #[serde(rename = "res")]
+            Response { id: String, result: () },
+        }
+
+        assert_eq!(
+            from_str("{ id: \"0\", method: \"post\" }"),
+            Ok(Message::Request {
+                id: "0".to_owned(),
+                method: "post".to_owned()
+            }),
+        );
+        assert_eq!(
+            from_str("{ id: \"0\", result: null }"),
+            Ok(Message::Response {
+                id: "0".to_owned(),
+                result: (),
+            }),
+        );
+    }
+}

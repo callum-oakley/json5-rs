@@ -208,3 +208,120 @@ fn serialize_structs_and_enums() {
     assert_eq!(to_string(&E::Y(0)), Ok("{\n  Y: 0,\n}".to_owned()));
     assert_eq!(to_string(&E::Z), Ok("\"Z\"".to_owned()));
 }
+
+#[test]
+// https://serde.rs/enum-representations.html
+fn enum_representations() {
+    // https://serde.rs/enum-representations.html#externally-tagged
+    {
+        #[derive(Serialize)]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: String, method: String },
+            #[serde(rename = "res")]
+            Response { id: String, result: () },
+        }
+
+        assert_eq!(
+            to_string(&Message::Request {
+                id: "0".to_owned(),
+                method: "post".to_owned()
+            }),
+            Ok("{\n  req: {\n    id: \"0\",\n    method: \"post\",\n  },\n}".to_owned())
+        );
+        assert_eq!(
+            to_string(&Message::Response {
+                id: "0".to_owned(),
+                result: (),
+            }),
+            Ok("{\n  res: {\n    id: \"0\",\n    result: null,\n  },\n}".to_owned())
+        );
+    }
+
+    // https://serde.rs/enum-representations.html#internally-tagged
+    {
+        #[derive(Serialize)]
+        #[serde(tag = "type")]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: String, method: String },
+            #[serde(rename = "res")]
+            Response { id: String, result: () },
+        }
+
+        assert_eq!(
+            to_string(&Message::Request {
+                id: "0".to_owned(),
+                method: "post".to_owned()
+            }),
+            Ok("{\n  type: \"req\",\n  id: \"0\",\n  method: \"post\",\n}".to_owned())
+        );
+        assert_eq!(
+            to_string(&Message::Response {
+                id: "0".to_owned(),
+                result: (),
+            }),
+            Ok("{\n  type: \"res\",\n  id: \"0\",\n  result: null,\n}".to_owned())
+        );
+    }
+
+    // https://serde.rs/enum-representations.html#adjacently-tagged
+    {
+        #[derive(Serialize)]
+        #[serde(tag = "type", content = "value")]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: String, method: String },
+            #[serde(rename = "res")]
+            Response { id: String, result: () },
+        }
+
+        assert_eq!(
+            to_string(&Message::Request {
+                id: "0".to_owned(),
+                method: "post".to_owned()
+            }),
+            Ok(
+                "{\n  type: \"req\",\n  value: {\n    id: \"0\",\n    method: \"post\",\n  },\n}"
+                    .to_owned()
+            )
+        );
+        assert_eq!(
+            to_string(&Message::Response {
+                id: "0".to_owned(),
+                result: (),
+            }),
+            Ok(
+                "{\n  type: \"res\",\n  value: {\n    id: \"0\",\n    result: null,\n  },\n}"
+                    .to_owned()
+            )
+        );
+    }
+
+    // https://serde.rs/enum-representations.html#untagged
+    {
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: String, method: String },
+            #[serde(rename = "res")]
+            Response { id: String, result: () },
+        }
+
+        assert_eq!(
+            to_string(&Message::Request {
+                id: "0".to_owned(),
+                method: "post".to_owned()
+            }),
+            Ok("{\n  id: \"0\",\n  method: \"post\",\n}".to_owned())
+        );
+        assert_eq!(
+            to_string(&Message::Response {
+                id: "0".to_owned(),
+                result: (),
+            }),
+            Ok("{\n  id: \"0\",\n  result: null,\n}".to_owned())
+        );
+    }
+}
