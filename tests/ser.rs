@@ -1,7 +1,11 @@
 use indexmap::IndexMap;
-use json5::{Error, ErrorCode, to_string};
+use json5::{
+    Comments, Error, ErrorCode, Result, SerializeOptions, from_str, to_string,
+    to_string_with_options,
+};
 use serde_bytes::{ByteBuf, Bytes};
 use serde_derive::Serialize;
+use serde_json::Value;
 
 // https://spec.json5.org/#values
 #[test]
@@ -118,6 +122,14 @@ fn serialize_object() {
     );
     assert_eq!(
         to_string(&IndexMap::from([("foo", 0), ("bar", 1), ("a b", 3)])),
+        Ok("{\n  foo: 0,\n  bar: 1,\n  \"a b\": 3,\n}".to_owned())
+    );
+    assert_eq!(
+        to_string(&IndexMap::from([
+            (Some("foo"), 0),
+            (Some("bar"), 1),
+            (Some("a b"), 3)
+        ])),
         Ok("{\n  foo: 0,\n  bar: 1,\n  \"a b\": 3,\n}".to_owned())
     );
     assert_eq!(
@@ -324,4 +336,69 @@ fn enum_representations() {
             Ok("{\n  id: \"0\",\n  result: null,\n}".to_owned())
         );
     }
+}
+
+#[test]
+fn comments() -> Result<()> {
+    let input = r#"
+        // Leading comment
+        // blah blah
+        {
+            // Explanation for foo
+            //
+            // - multiple
+            // - lines
+            //   - and some indentation
+            foo: [
+                'a',
+
+                /*
+                  Explanation for 'b'
+                  In a multi-line comment
+                */
+                'b',
+                'c',
+
+                // 'd', commented out
+            ],
+            bar: {
+                // Intentionally left blank
+            },
+        }
+        // Trailing comment
+        // blah blah
+    "#;
+    let value: Value = from_str(input)?;
+    assert_eq!(
+        to_string_with_options(
+            &value,
+            &SerializeOptions::default().comments(&Comments::from_str(input)?)
+        )?,
+        [
+            "// Leading comment",
+            "// blah blah",
+            "{",
+            "  // Explanation for foo",
+            "  //",
+            "  // - multiple",
+            "  // - lines",
+            "  //   - and some indentation",
+            "  foo: [",
+            "    \"a\",",
+            "    // Explanation for 'b'",
+            "    // In a multi-line comment",
+            "    \"b\",",
+            "    \"c\",",
+            "    // 'd', commented out",
+            "  ],",
+            "  bar: {",
+            "    // Intentionally left blank",
+            "  },",
+            "}",
+            "// Trailing comment",
+            "// blah blah",
+        ]
+        .join("\n")
+    );
+    Ok(())
 }

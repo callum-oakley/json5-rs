@@ -1,5 +1,7 @@
 use std::{
+    collections::HashMap,
     fmt::Display,
+    hash::Hash,
     iter::Peekable,
     ops::Deref,
     str::{CharIndices, FromStr},
@@ -7,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, de::Visitor, forward_to_deserialize_any};
 
-use crate::error::{Error, ErrorCode, Position, Result};
+use crate::{Error, ErrorCode, Position, Result};
 
 /// Parse a JSON5 string and map it to a type implementing [`Deserialize`].
 ///
@@ -50,6 +52,7 @@ pub fn from_str<'de, T: Deserialize<'de>>(input: &'de str) -> Result<T> {
 pub struct Deserializer<'de> {
     input: &'de str,
     char_indices: Peekable<CharIndices<'de>>,
+    comment_visitor: Option<CommentVisitor<'de>>,
 }
 
 impl<'de> Deserializer<'de> {
@@ -63,6 +66,7 @@ impl<'de> Deserializer<'de> {
         Self {
             input,
             char_indices: input.char_indices().peekable(),
+            comment_visitor: None,
         }
     }
 }
@@ -124,14 +128,21 @@ impl<'de> Deserializer<'de> {
         self.skip_whitespace()?;
         let (offset, c) = self.next_or(eof)?;
         match c {
-            c if c == close => Ok(()),
+            c if c == close => {}
             ',' => {
                 self.skip_whitespace()?;
                 self.expect_char(close, eof, unexpected)?;
-                Ok(())
             }
-            _ => Err(self.err_at(offset, unexpected)),
+            _ => {
+                return Err(self.err_at(offset, unexpected));
+            }
         }
+
+        if let Some(comment_visitor) = &mut self.comment_visitor {
+            comment_visitor.visit_collection_end();
+        }
+
+        Ok(())
     }
 
     // https://spec.json5.org/#white-space
@@ -158,15 +169,21 @@ impl<'de> Deserializer<'de> {
         let (offset, c) = self.next_or(ErrorCode::EofParsingComment)?;
         match c {
             '/' => {
-                while let Some((_, c)) = self.next() {
+                while let Some((o, c)) = self.next() {
                     if crate::char::is_json5_line_terminator(c) {
+                        if let Some(comment_visitor) = &mut self.comment_visitor {
+                            comment_visitor.visit_line_comment(&self.input[offset + 1..o]);
+                        }
                         break;
                     }
                 }
             }
             '*' => {
-                while let Some((_, c)) = self.next() {
+                while let Some((o, c)) = self.next() {
                     if c == '*' && self.peek().is_some_and(|(_, c)| c == '/') {
+                        if let Some(comment_visitor) = &mut self.comment_visitor {
+                            comment_visitor.visit_multiline_comment(&self.input[offset + 1..o]);
+                        }
                         self.next();
                         break;
                     }
@@ -457,10 +474,16 @@ impl<'de> Deserializer<'de> {
     fn parse_key(&mut self) -> Result<(usize, StringResult<'de>)> {
         self.skip_whitespace()?;
 
-        match self.peek_or(ErrorCode::EofParsingObject)? {
+        let (offset, key) = match self.peek_or(ErrorCode::EofParsingObject)? {
             (_, '"' | '\'') => self.parse_string(),
             (offset, _) => self.parse_identifier().map(|i| (offset, i)),
+        }?;
+
+        if let Some(comment_visitor) = &mut self.comment_visitor {
+            comment_visitor.push_path_segment(PathSegment::Key(key.clone()));
         }
+
+        Ok((offset, key))
     }
 
     // https://262.ecma-international.org/5.1/#sec-7.6
@@ -603,11 +626,11 @@ macro_rules! deserialize_collection {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
             self.skip_whitespace()?;
             let offset = self.expect_char($open, $eof, $expected_opening)?;
+            if let Some(comment_visitor) = &mut self.comment_visitor {
+                comment_visitor.visit_collection_start();
+            }
             let value = visitor
-                .$visit($access {
-                    de: self,
-                    first: true,
-                })
+                .$visit($access { de: self, index: 0 })
                 .map_err(|err| self.with_position(err, offset))?;
             self.expect_collection_end($close, $eof, $expected_closing)?;
             Ok(value)
@@ -774,7 +797,7 @@ impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
 
 struct SeqAccess<'a, 'de: 'a> {
     de: &'a mut Deserializer<'de>,
-    first: bool,
+    index: usize,
 }
 
 impl<'de> serde::de::SeqAccess<'de> for SeqAccess<'_, 'de> {
@@ -789,7 +812,7 @@ impl<'de> serde::de::SeqAccess<'de> for SeqAccess<'_, 'de> {
             return Ok(None);
         }
 
-        if !self.first {
+        if self.index > 0 {
             self.de
                 .expect_char(',', ErrorCode::EofParsingArray, ErrorCode::ExpectedComma)?;
 
@@ -798,15 +821,25 @@ impl<'de> serde::de::SeqAccess<'de> for SeqAccess<'_, 'de> {
                 return Ok(None);
             }
         }
-        self.first = false;
 
-        seed.deserialize(&mut *self.de).map(Some)
+        if let Some(comment_visitor) = &mut self.de.comment_visitor {
+            comment_visitor.push_path_segment(PathSegment::Index(self.index));
+        }
+
+        let value = seed.deserialize(&mut *self.de)?;
+        self.index += 1;
+
+        if let Some(comment_visitor) = &mut self.de.comment_visitor {
+            comment_visitor.pop_path_segment();
+        }
+
+        Ok(Some(value))
     }
 }
 
 struct MapAccess<'a, 'de: 'a> {
     de: &'a mut Deserializer<'de>,
-    first: bool,
+    index: usize,
 }
 
 impl<'de> serde::de::MapAccess<'de> for MapAccess<'_, 'de> {
@@ -821,7 +854,7 @@ impl<'de> serde::de::MapAccess<'de> for MapAccess<'_, 'de> {
             return Ok(None);
         }
 
-        if !self.first {
+        if self.index > 0 {
             self.de
                 .expect_char(',', ErrorCode::EofParsingObject, ErrorCode::ExpectedComma)?;
 
@@ -830,7 +863,7 @@ impl<'de> serde::de::MapAccess<'de> for MapAccess<'_, 'de> {
                 return Ok(None);
             }
         }
-        self.first = false;
+        self.index += 1;
 
         seed.deserialize(MapKey { de: self.de }).map(Some)
     }
@@ -842,7 +875,14 @@ impl<'de> serde::de::MapAccess<'de> for MapAccess<'_, 'de> {
         self.de.skip_whitespace()?;
         self.de
             .expect_char(':', ErrorCode::EofParsingObject, ErrorCode::ExpectedColon)?;
-        seed.deserialize(&mut *self.de)
+
+        let value = seed.deserialize(&mut *self.de)?;
+
+        if let Some(comment_visitor) = &mut self.de.comment_visitor {
+            comment_visitor.pop_path_segment();
+        }
+
+        Ok(value)
     }
 }
 
@@ -1065,7 +1105,8 @@ impl<'de> serde::de::VariantAccess<'de> for UnitVariantAccess<'_, 'de> {
     }
 }
 
-enum StringResult<'de> {
+#[derive(Eq, Clone)]
+pub(crate) enum StringResult<'de> {
     Borrowed(&'de str),
     Owned(String),
 }
@@ -1081,8 +1122,119 @@ impl Deref for StringResult<'_> {
     }
 }
 
+impl PartialEq for StringResult<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        (**self).eq(&**other)
+    }
+}
+
+impl Hash for StringResult<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
+    }
+}
+
 enum NumberResult {
     U128(u128),
     I128(i128),
     F64(f64),
+}
+
+pub struct Comments<'de> {
+    pub(crate) inner: HashMap<Vec<PathSegment<'de>>, Vec<&'de str>>,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone)]
+pub(crate) enum PathSegment<'de> {
+    Key(StringResult<'de>),
+    Index(usize),
+    Open,
+    Close,
+    Eof,
+}
+
+impl<'de> Comments<'de> {
+    /// TODO
+    ///
+    /// # Errors
+    /// TODO
+    #[expect(clippy::should_implement_trait, clippy::missing_panics_doc)]
+    pub fn from_str(input: &'de str) -> Result<Self> {
+        let mut deserializer = Deserializer::from_str(input);
+        deserializer.comment_visitor = Some(CommentVisitor::new());
+        serde::de::IgnoredAny::deserialize(&mut deserializer)?;
+        deserializer.skip_whitespace()?;
+        Ok(deserializer
+            .comment_visitor
+            .expect("comment_visitor is Some")
+            .finalize())
+    }
+}
+
+struct CommentVisitor<'de> {
+    path: Vec<PathSegment<'de>>,
+    comment: Vec<&'de str>,
+    comments: HashMap<Vec<PathSegment<'de>>, Vec<&'de str>>,
+}
+
+impl<'de> CommentVisitor<'de> {
+    fn new() -> Self {
+        Self {
+            path: Vec::new(),
+            comment: Vec::new(),
+            comments: HashMap::new(),
+        }
+    }
+
+    fn push_path_segment(&mut self, path_segment: PathSegment<'de>) {
+        self.path.push(path_segment);
+        if !self.comment.is_empty() {
+            self.comments
+                .insert(self.path.clone(), std::mem::take(&mut self.comment));
+        }
+    }
+
+    fn pop_path_segment(&mut self) {
+        self.path.pop();
+    }
+
+    fn visit_line_comment(&mut self, line: &'de str) {
+        self.comment.push(line);
+    }
+
+    // Normalise everything to line comments for now.
+    fn visit_multiline_comment(&mut self, comment: &'de str) {
+        for line in comment.trim().lines() {
+            self.visit_line_comment(line.trim());
+        }
+    }
+
+    fn visit_collection_start(&mut self) {
+        // Handle comments that appear at the start of the document.
+        if self.path.is_empty() && !self.comment.is_empty() {
+            self.comments
+                .insert(vec![PathSegment::Open], std::mem::take(&mut self.comment));
+        }
+    }
+
+    fn visit_collection_end(&mut self) {
+        // Handle comments that appear at the end of a collection.
+        if !self.comment.is_empty() {
+            let mut path = self.path.clone();
+            path.push(PathSegment::Close);
+            self.comments
+                .insert(path, std::mem::take(&mut self.comment));
+        }
+    }
+
+    fn finalize(mut self) -> Comments<'de> {
+        // Handle comments that appear at the end of the document.
+        if !self.comment.is_empty() {
+            self.comments
+                .insert(vec![PathSegment::Eof], std::mem::take(&mut self.comment));
+        }
+        Comments {
+            inner: self.comments,
+        }
+    }
 }

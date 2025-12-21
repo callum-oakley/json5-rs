@@ -1,8 +1,12 @@
-use std::io::Write;
+use std::{collections::HashMap, io::Write};
 
 use serde::{Serialize, ser::Impossible};
 
-use crate::{Error, ErrorCode, error::Result};
+use crate::{
+    Comments, Error, ErrorCode,
+    de::{PathSegment, StringResult},
+    error::Result,
+};
 
 /// Serialize a type implementing [`Serialize`] to a JSON5 string.
 ///
@@ -32,9 +36,20 @@ use crate::{Error, ErrorCode, error::Result};
 /// Fails if we can't express `T` in JSON5 (e.g. we try to serialize an object key without an
 /// obvious string representation).
 pub fn to_string<T: Serialize>(value: &T) -> Result<String> {
+    to_string_with_options(value, &SerializeOptions::default())
+}
+
+/// TODO
+///
+/// # Errors
+/// TODO
+#[expect(clippy::missing_panics_doc)]
+pub fn to_string_with_options<T: Serialize>(
+    value: &T,
+    options: &SerializeOptions,
+) -> Result<String> {
     let mut w = Vec::new();
-    to_writer(&mut w, value)?;
-    #[expect(clippy::missing_panics_doc)]
+    to_writer_with_options(&mut w, value, options)?;
     Ok(String::from_utf8(w).expect("we only write valid UTF-8"))
 }
 
@@ -44,18 +59,105 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String> {
 /// Fails if we can't express `T` in JSON5 (e.g. we try to serialize an object key without an
 /// obvious string representation) or if there's an error writing to the writer.
 pub fn to_writer<T: Serialize, W: Write>(w: W, value: &T) -> Result<()> {
-    value.serialize(&mut Serializer::new(w))
+    to_writer_with_options(w, value, &SerializeOptions::default())
+}
+
+/// TODO
+///
+/// # Errors
+/// TODO
+pub fn to_writer_with_options<T: Serialize, W: Write>(
+    w: W,
+    value: &T,
+    options: &SerializeOptions,
+) -> Result<()> {
+    let mut serializer = Serializer::new_with_options(w, options);
+    if serializer.comment_ser.is_some() {
+        serializer.push_path_segment(PathSegment::Open)?;
+        serializer.pop_path_segment();
+    }
+    value.serialize(&mut serializer)?;
+    if serializer.comment_ser.is_some() {
+        serializer.push_path_segment(PathSegment::Eof)?;
+        serializer.pop_path_segment();
+    }
+    Ok(())
+}
+
+/// TODO
+#[derive(Default)]
+pub struct SerializeOptions<'a, 'de> {
+    comments: Option<&'a Comments<'de>>,
+}
+
+impl<'a, 'de> SerializeOptions<'a, 'de> {
+    #[must_use]
+    pub fn comments(mut self, comments: &'a Comments<'de>) -> Self {
+        self.comments = Some(comments);
+        self
+    }
 }
 
 /// A serializer that knows how to serialize types implementing [`Serialize`] as JSON5.
-pub struct Serializer<W: Write> {
+pub struct Serializer<'a, 'de, W: Write> {
     w: W,
     depth: usize,
+    comment_ser: Option<CommentSerializer<'a, 'de>>,
 }
 
-impl<W: Write> Serializer<W> {
+macro_rules! indent {
+    ($ser:expr) => {
+        write!($ser.w, "\n{:indent$}", "", indent = $ser.depth * 2)
+    };
+}
+
+impl<'a, 'de, W: Write> Serializer<'a, 'de, W> {
     pub fn new(w: W) -> Self {
-        Self { w, depth: 0 }
+        Self {
+            w,
+            depth: 0,
+            comment_ser: None,
+        }
+    }
+
+    pub fn new_with_options(w: W, options: &SerializeOptions<'a, 'de>) -> Self {
+        Self {
+            w,
+            depth: 0,
+            comment_ser: options.comments.map(|comments| CommentSerializer {
+                path: Vec::new(),
+                comments: &comments.inner,
+            }),
+        }
+    }
+
+    fn push_path_segment(&mut self, path_segment: PathSegment<'de>) -> Result<bool> {
+        if let Some(comment_ser) = &mut self.comment_ser {
+            comment_ser.path.push(path_segment);
+            if let Some(comment) = comment_ser.comments.get(&comment_ser.path) {
+                for (i, line) in comment.iter().enumerate() {
+                    if comment_ser.path != vec![PathSegment::Open] || i > 0 {
+                        indent!(self)?;
+                    }
+                    write!(self.w, "//")?;
+                    if !line.is_empty() && !line.starts_with(' ') {
+                        write!(self.w, " ")?;
+                    }
+                    write!(self.w, "{line}")?;
+                }
+                if comment_ser.path == vec![PathSegment::Open] {
+                    writeln!(self.w)?;
+                }
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn pop_path_segment(&mut self) {
+        if let Some(comment_ser) = &mut self.comment_ser {
+            comment_ser.path.pop();
+        }
     }
 }
 
@@ -82,16 +184,16 @@ macro_rules! serialize_float {
     };
 }
 
-impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
+impl<'a, 'b, 'de, W: Write> serde::ser::Serializer for &'a mut Serializer<'b, 'de, W> {
     type Ok = ();
     type Error = Error;
-    type SerializeSeq = SerializeCollection<'a, W>;
-    type SerializeTuple = SerializeCollection<'a, W>;
-    type SerializeTupleStruct = SerializeCollection<'a, W>;
-    type SerializeTupleVariant = SerializeCollection<'a, W>;
-    type SerializeMap = SerializeCollection<'a, W>;
-    type SerializeStruct = SerializeCollection<'a, W>;
-    type SerializeStructVariant = SerializeCollection<'a, W>;
+    type SerializeSeq = SerializeCollection<'a, 'b, 'de, W>;
+    type SerializeTuple = SerializeCollection<'a, 'b, 'de, W>;
+    type SerializeTupleStruct = SerializeCollection<'a, 'b, 'de, W>;
+    type SerializeTupleVariant = SerializeCollection<'a, 'b, 'de, W>;
+    type SerializeMap = SerializeCollection<'a, 'b, 'de, W>;
+    type SerializeStruct = SerializeCollection<'a, 'b, 'de, W>;
+    type SerializeStructVariant = SerializeCollection<'a, 'b, 'de, W>;
 
     serialize_display!(serialize_bool, bool);
     serialize_display!(serialize_u8, u8);
@@ -137,9 +239,7 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok> {
         write!(self.w, "\"")?;
-        for b in v {
-            write!(self.w, "{b:02x}")?;
-        }
+        write_hex(&mut self.w, v)?;
         write!(self.w, "\"")?;
         Ok(())
     }
@@ -191,12 +291,20 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
     {
         write!(self.w, "{{")?;
         self.depth += 1;
-        write!(self.w, "\n{:indent$}", "", indent = self.depth * 2)?;
         MapKey::new(self).serialize_str(variant)?;
         write!(self.w, ": ")?;
         v.serialize(&mut *self)?;
+        write!(self.w, ",")?;
+
+        if self.comment_ser.is_some() {
+            self.push_path_segment(PathSegment::Close)?;
+            self.pop_path_segment();
+        }
+
         self.depth -= 1;
-        write!(self.w, ",\n{:indent$}}}", "", indent = self.depth * 2)?;
+        indent!(self)?;
+        write!(self.w, "}}")?;
+
         Ok(())
     }
 
@@ -227,7 +335,6 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
     ) -> Result<Self::SerializeTupleVariant> {
         write!(self.w, "{{")?;
         self.depth += 1;
-        write!(self.w, "\n{:indent$}", "", indent = self.depth * 2)?;
         MapKey::new(self).serialize_str(variant)?;
         write!(self.w, ": ")?;
         self.serialize_seq(Some(len))
@@ -252,40 +359,38 @@ impl<'a, W: Write> serde::ser::Serializer for &'a mut Serializer<W> {
     ) -> Result<Self::SerializeStructVariant> {
         write!(self.w, "{{")?;
         self.depth += 1;
-        write!(self.w, "\n{:indent$}", "", indent = self.depth * 2)?;
         MapKey::new(self).serialize_str(variant)?;
         write!(self.w, ": ")?;
         self.serialize_map(Some(len))
     }
 }
 
-pub struct SerializeCollection<'a, W: Write> {
-    ser: &'a mut Serializer<W>,
-    empty: bool,
+pub struct SerializeCollection<'a, 'b, 'de, W: Write> {
+    ser: &'a mut Serializer<'b, 'de, W>,
+    index: usize,
 }
 
-impl<'a, W: Write> SerializeCollection<'a, W> {
-    fn new(ser: &'a mut Serializer<W>) -> Self {
-        Self { ser, empty: true }
+impl<'a, 'b, 'de, W: Write> SerializeCollection<'a, 'b, 'de, W> {
+    fn new(ser: &'a mut Serializer<'b, 'de, W>) -> Self {
+        Self { ser, index: 0 }
     }
 
     fn close(&mut self, delimiter: char) -> Result<()> {
-        self.ser.depth -= 1;
-        if self.empty {
-            write!(self.ser.w, "{delimiter}")?;
-        } else {
-            write!(
-                self.ser.w,
-                "\n{:indent$}{delimiter}",
-                "",
-                indent = self.ser.depth * 2
-            )?;
+        let mut comment = false;
+        if self.ser.comment_ser.is_some() {
+            comment = self.ser.push_path_segment(PathSegment::Close)?;
+            self.ser.pop_path_segment();
         }
+        self.ser.depth -= 1;
+        if self.index > 0 || comment {
+            indent!(self.ser)?;
+        }
+        write!(self.ser.w, "{delimiter}")?;
         Ok(())
     }
 }
 
-impl<W: Write> serde::ser::SerializeSeq for SerializeCollection<'_, W> {
+impl<W: Write> serde::ser::SerializeSeq for SerializeCollection<'_, '_, '_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -293,10 +398,19 @@ impl<W: Write> serde::ser::SerializeSeq for SerializeCollection<'_, W> {
     where
         T: ?Sized + Serialize,
     {
-        self.empty = false;
-        write!(self.ser.w, "\n{:indent$}", "", indent = self.ser.depth * 2)?;
+        if self.ser.comment_ser.is_some() {
+            self.ser.push_path_segment(PathSegment::Index(self.index))?;
+        }
+        self.index += 1;
+
+        indent!(self.ser)?;
         value.serialize(&mut *self.ser)?;
         write!(self.ser.w, ",")?;
+
+        if self.ser.comment_ser.is_some() {
+            self.ser.pop_path_segment();
+        }
+
         Ok(())
     }
 
@@ -305,7 +419,7 @@ impl<W: Write> serde::ser::SerializeSeq for SerializeCollection<'_, W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeTuple for SerializeCollection<'_, W> {
+impl<W: Write> serde::ser::SerializeTuple for SerializeCollection<'_, '_, '_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -321,7 +435,7 @@ impl<W: Write> serde::ser::SerializeTuple for SerializeCollection<'_, W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeTupleStruct for SerializeCollection<'_, W> {
+impl<W: Write> serde::ser::SerializeTupleStruct for SerializeCollection<'_, '_, '_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -337,7 +451,7 @@ impl<W: Write> serde::ser::SerializeTupleStruct for SerializeCollection<'_, W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeTupleVariant for SerializeCollection<'_, W> {
+impl<W: Write> serde::ser::SerializeTupleVariant for SerializeCollection<'_, '_, '_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -350,18 +464,19 @@ impl<W: Write> serde::ser::SerializeTupleVariant for SerializeCollection<'_, W> 
 
     fn end(mut self) -> Result<Self::Ok> {
         self.close(']')?;
+        write!(self.ser.w, ",")?;
+        if self.ser.comment_ser.is_some() {
+            self.ser.push_path_segment(PathSegment::Close)?;
+            self.ser.pop_path_segment();
+        }
         self.ser.depth -= 1;
-        write!(
-            self.ser.w,
-            ",\n{:indent$}}}",
-            "",
-            indent = self.ser.depth * 2
-        )?;
+        indent!(self.ser)?;
+        write!(self.ser.w, "}}")?;
         Ok(())
     }
 }
 
-impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, W> {
+impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, '_, '_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -369,8 +484,7 @@ impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, W> {
     where
         T: ?Sized + Serialize,
     {
-        self.empty = false;
-        write!(self.ser.w, "\n{:indent$}", "", indent = self.ser.depth * 2)?;
+        self.index += 1;
         key.serialize(MapKey::new(self.ser))?;
         write!(self.ser.w, ": ")?;
         Ok(())
@@ -382,6 +496,9 @@ impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, W> {
     {
         value.serialize(&mut *self.ser)?;
         write!(self.ser.w, ",")?;
+        if self.ser.comment_ser.is_some() {
+            self.ser.pop_path_segment();
+        }
         Ok(())
     }
 
@@ -390,7 +507,7 @@ impl<W: Write> serde::ser::SerializeMap for SerializeCollection<'_, W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeStruct for SerializeCollection<'_, W> {
+impl<W: Write> serde::ser::SerializeStruct for SerializeCollection<'_, '_, '_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -406,7 +523,7 @@ impl<W: Write> serde::ser::SerializeStruct for SerializeCollection<'_, W> {
     }
 }
 
-impl<W: Write> serde::ser::SerializeStructVariant for SerializeCollection<'_, W> {
+impl<W: Write> serde::ser::SerializeStructVariant for SerializeCollection<'_, '_, '_, W> {
     type Ok = ();
     type Error = Error;
 
@@ -419,13 +536,17 @@ impl<W: Write> serde::ser::SerializeStructVariant for SerializeCollection<'_, W>
 
     fn end(mut self) -> Result<Self::Ok> {
         self.close('}')?;
+        write!(self.ser.w, ",")?;
+
+        if self.ser.comment_ser.is_some() {
+            self.ser.push_path_segment(PathSegment::Close)?;
+            self.ser.pop_path_segment();
+        }
+
         self.ser.depth -= 1;
-        write!(
-            self.ser.w,
-            ",\n{:indent$}}}",
-            "",
-            indent = self.ser.depth * 2
-        )?;
+        indent!(self.ser)?;
+        write!(self.ser.w, "}}")?;
+
         Ok(())
     }
 }
@@ -433,6 +554,11 @@ impl<W: Write> serde::ser::SerializeStructVariant for SerializeCollection<'_, W>
 macro_rules! serialize_quoted {
     ($method:ident, $type:ty) => {
         fn $method(self, v: $type) -> Result<Self::Ok> {
+            if self.ser.comment_ser.is_some() {
+                self.ser
+                    .push_path_segment(PathSegment::Key(StringResult::Owned(to_string(&v)?)))?;
+            }
+            indent!(self.ser)?;
             write!(self.ser.w, "\"")?;
             self.ser.$method(v)?;
             write!(self.ser.w, "\"")?;
@@ -441,17 +567,17 @@ macro_rules! serialize_quoted {
     };
 }
 
-struct MapKey<'a, W: Write> {
-    ser: &'a mut Serializer<W>,
+struct MapKey<'a, 'b, 'de, W: Write> {
+    ser: &'a mut Serializer<'b, 'de, W>,
 }
 
-impl<'a, W: Write> MapKey<'a, W> {
-    fn new(ser: &'a mut Serializer<W>) -> Self {
+impl<'a, 'b, 'de, W: Write> MapKey<'a, 'b, 'de, W> {
+    fn new(ser: &'a mut Serializer<'b, 'de, W>) -> Self {
         Self { ser }
     }
 }
 
-impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
+impl<W: Write> serde::ser::Serializer for MapKey<'_, '_, '_, W> {
     type Ok = ();
     type Error = Error;
     type SerializeSeq = Impossible<(), Error>;
@@ -476,10 +602,20 @@ impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
     serialize_quoted!(serialize_f64, f64);
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok> {
+        if self.ser.comment_ser.is_some() {
+            self.ser
+                .push_path_segment(PathSegment::Key(StringResult::Owned(v.to_string())))?;
+        }
+        indent!(self.ser)?;
         self.ser.serialize_bool(v)
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok> {
+        if self.ser.comment_ser.is_some() {
+            self.ser
+                .push_path_segment(PathSegment::Key(StringResult::Owned(v.to_string())))?;
+        }
+        indent!(self.ser)?;
         if crate::char::is_json5_identifier_start(v) {
             write!(self.ser.w, "{v}")?;
         } else {
@@ -489,6 +625,11 @@ impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
+        if self.ser.comment_ser.is_some() {
+            self.ser
+                .push_path_segment(PathSegment::Key(StringResult::Owned(v.to_string())))?;
+        }
+        indent!(self.ser)?;
         let mut chars = v.chars();
         if let Some(first) = chars.next()
             && crate::char::is_json5_identifier_start(first)
@@ -511,6 +652,15 @@ impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok> {
+        if self.ser.comment_ser.is_some() {
+            let mut buf = Vec::new();
+            write_hex(&mut buf, v)?;
+            self.ser
+                .push_path_segment(PathSegment::Key(StringResult::Owned(
+                    String::from_utf8(buf).unwrap(),
+                )))?;
+        }
+        indent!(self.ser)?;
         self.ser.serialize_bytes(v)
     }
 
@@ -518,15 +668,20 @@ impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
     where
         T: ?Sized + Serialize,
     {
-        self.ser.serialize_some(v)
+        v.serialize(self)
     }
 
     fn serialize_unit(self) -> Result<Self::Ok> {
+        if self.ser.comment_ser.is_some() {
+            self.ser
+                .push_path_segment(PathSegment::Key(StringResult::Borrowed("null")))?;
+        }
+        indent!(self.ser)?;
         self.ser.serialize_unit()
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok> {
-        self.ser.serialize_unit_struct(name)
+    fn serialize_unit_struct(self, _: &'static str) -> Result<Self::Ok> {
+        self.serialize_unit()
     }
 
     fn serialize_newtype_struct<T>(self, _: &'static str, value: &T) -> Result<Self::Ok>
@@ -596,4 +751,16 @@ impl<W: Write> serde::ser::Serializer for MapKey<'_, W> {
     ) -> Result<Self::SerializeStructVariant> {
         Err(Error::new(ErrorCode::InvalidKey))
     }
+}
+
+struct CommentSerializer<'a, 'de> {
+    path: Vec<PathSegment<'de>>,
+    comments: &'a HashMap<Vec<PathSegment<'de>>, Vec<&'de str>>,
+}
+
+fn write_hex<W: Write>(mut w: W, bytes: &[u8]) -> Result<()> {
+    for b in bytes {
+        write!(w, "{b:02x}")?;
+    }
+    Ok(())
 }

@@ -121,6 +121,9 @@ mod ser;
 #[allow(clippy::all, clippy::pedantic, dead_code)]
 mod unicode;
 
-pub use de::{Deserializer, from_str};
-pub use error::{Error, ErrorCode, Position};
-pub use ser::{Serializer, to_string, to_writer};
+pub use de::{Comments, Deserializer, from_str};
+pub use error::{Error, ErrorCode, Position, Result};
+pub use ser::{
+    SerializeOptions, Serializer, to_string, to_string_with_options, to_writer,
+    to_writer_with_options,
+};
