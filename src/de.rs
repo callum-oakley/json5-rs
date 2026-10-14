@@ -394,7 +394,7 @@ impl<'de> Deserializer<'de> {
                 Ok(Some('\u{0000}'))
             }
 
-            '1'..'9' => Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence)),
+            '1'..='9' => Err(self.err_at(offset, ErrorCode::InvalidEscapeSequence)),
 
             'x' => Ok(Some(self.parse_hex_escape_sequence(offset)?)),
 

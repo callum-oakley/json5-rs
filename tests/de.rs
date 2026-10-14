@@ -212,6 +212,10 @@ fn parse_string() {
         Err(err_at(0, 1, InvalidEscapeSequence))
     );
     assert_eq!(
+        from_str::<String>(r#"'\9'"#),
+        Err(err_at(0, 1, InvalidEscapeSequence))
+    );
+    assert_eq!(
         from_str::<String>("false"),
         Err(err_at(0, 0, ExpectedString))
     );
