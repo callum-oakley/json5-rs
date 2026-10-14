@@ -164,14 +164,13 @@ impl<'de> Deserializer<'de> {
                     }
                 }
             }
-            '*' => {
-                while let Some((_, c)) = self.next() {
-                    if c == '*' && self.peek().is_some_and(|(_, c)| c == '/') {
-                        self.next();
-                        break;
-                    }
+            '*' => loop {
+                let (_, c) = self.next_or(ErrorCode::EofParsingComment)?;
+                if c == '*' && self.peek().is_some_and(|(_, c)| c == '/') {
+                    self.next();
+                    break;
                 }
-            }
+            },
             _ => {
                 return Err(self.err_at(offset, ErrorCode::ExpectedComment));
             }

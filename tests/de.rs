@@ -580,6 +580,7 @@ fn comments() {
         ),
         Ok(())
     );
+    assert_eq!(from_str::<()>("null /*"), Err(err(EofParsingComment)))
 }
 
 #[test]
