@@ -312,7 +312,7 @@ impl<'de> Deserializer<'de> {
                 .and_then(|n| {
                     n.checked_add(u128::from(c.to_digit(16).expect("c is ascii hexdigit")))
                 })
-                .ok_or(self.err_at(offset, ErrorCode::OverflowParsingNumber))?;
+                .ok_or_else(|| self.err_at(offset, ErrorCode::OverflowParsingNumber))?;
         }
 
         if neg {
