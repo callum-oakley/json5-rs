@@ -356,7 +356,7 @@ impl<'de> Deserializer<'de> {
                 // LineTerminator is forbidden except U+2028 and U+2029 are explicitly allowed.
                 return Err(self.err_at(offset, ErrorCode::LineTerminatorInString));
             } else if c == '\\' {
-                let owned = owned.get_or_insert(self.input[start..offset].to_owned());
+                let owned = owned.get_or_insert_with(|| self.input[start..offset].to_owned());
                 if let Some(c) = self.parse_escape_sequence(offset)? {
                     owned.push(c);
                 }
@@ -472,7 +472,7 @@ impl<'de> Deserializer<'de> {
 
             if c == '\\' {
                 self.next();
-                let owned = owned.get_or_insert(self.input[start..offset].to_owned());
+                let owned = owned.get_or_insert_with(|| self.input[start..offset].to_owned());
                 self.expect_char(
                     'u',
                     ErrorCode::EofParsingIdentifier,
