@@ -163,7 +163,7 @@ fn parse_number() {
         Err(custom_err_at(
             0,
             0,
-            "out of range integral type conversion attempted"
+            "number too large to fit in target type"
         ))
     );
 }
