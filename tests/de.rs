@@ -155,19 +155,19 @@ fn parse_number() {
         ))
     );
     assert_eq!(
-        from_str::<i64>("340282366920938463463374607431768211456"), // u128::MAX + 1
+        from_str::<u128>("340282366920938463463374607431768211456"), // u128::MAX + 1
         Err(custom_err_at(
             0,
             0,
-            "invalid type: floating point `340282366920938500000000000000000000000.0`, expected i64"
+            "invalid type: floating point `340282366920938500000000000000000000000.0`, expected u128"
         ))
     );
     assert_eq!(
-        from_str::<i64>("-170141183460469231731687303715884105729"), // i128::MIN - 1
+        from_str::<i128>("-170141183460469231731687303715884105729"), // i128::MIN - 1
         Err(custom_err_at(
             0,
             0,
-            "invalid type: floating point `-170141183460469230000000000000000000000.0`, expected i64"
+            "invalid type: floating point `-170141183460469230000000000000000000000.0`, expected i128"
         ))
     );
     assert_eq!(
