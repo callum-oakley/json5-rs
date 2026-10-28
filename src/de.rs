@@ -273,6 +273,16 @@ impl<'de> Deserializer<'de> {
             self.next();
             offset = o;
         }
+
+        // If the input contains '.', 'e', or 'E' then it must be a float.
+        if self.input[start..=offset].contains(['.', 'e', 'E']) {
+            return Ok(NumberResult::F64(
+                self.parse_from_str::<f64>(start, offset)?,
+            ));
+        }
+
+        // Otherwise try to parse it as an integer and fall back to a float on failure (e.g. for
+        // integers that don't fit in 128 bits.)
         if !neg && let Ok(u) = self.parse_from_str::<u128>(start, offset) {
             Ok(NumberResult::U128(u))
         } else if neg && let Ok(i) = self.parse_from_str::<i128>(start, offset) {
