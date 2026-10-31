@@ -743,6 +743,33 @@ fn enum_representations() {
         );
     }
 
+    // Regression test for https://github.com/callum-oakley/json5-rs/issues/63
+    {
+        #[derive(PartialEq, Debug, Deserialize)]
+        struct WrappedF64 {
+            value: f64,
+        }
+
+        #[derive(PartialEq, Debug, Deserialize)]
+        #[serde(tag = "type")]
+        enum Message {
+            #[serde(rename = "req")]
+            Request { id: WrappedF64, method: String },
+            #[serde(rename = "res")]
+            Response { id: WrappedF64, result: () },
+        }
+
+        assert_eq!(
+            from_str("{ type: \"req\", id: { value: 18446744073709552000 }, method: \"post\" }"),
+            Ok(Message::Request {
+                id: WrappedF64 {
+                    value: 18446744073709552000f64
+                },
+                method: "post".to_owned()
+            }),
+        );
+    }
+
     // https://serde.rs/enum-representations.html#adjacently-tagged
     {
         #[derive(PartialEq, Debug, Deserialize)]

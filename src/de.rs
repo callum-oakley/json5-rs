@@ -526,35 +526,42 @@ impl<'de> Deserializer<'de> {
         err.with_position(Position::from_offset(offset, self.input))
     }
 
+    /// When deserialising a number of unknown type always visit u64, i64, or f64 since they have
+    /// the best support. `visit_u128` and `visit_i128` in particular are often not supported.
+    #[allow(clippy::cast_precision_loss)]
     fn deserialize_number<V: Visitor<'de>>(&mut self, visitor: V) -> Result<V::Value> {
         let (offset, number) = self.parse_number()?;
         match number {
-            NumberResult::U128(u) => {
-                // If the result fits in a u64 then visit_u64 because it has better support.
-                if let Ok(u) = u64::try_from(u) {
-                    visitor.visit_u64(u)
-                } else {
-                    visitor.visit_u128(u)
-                }
-            }
-            NumberResult::I128(i) => {
-                // If the result fits in an i64 then visit_i64 because it has better support.
-                if let Ok(i) = i64::try_from(i) {
-                    visitor.visit_i64(i)
-                } else {
-                    visitor.visit_i128(i)
-                }
-            }
+            NumberResult::U128(u) => match u64::try_from(u) {
+                Ok(u) => visitor.visit_u64(u),
+                Err(_) => visitor.visit_f64(u as f64),
+            },
+            NumberResult::I128(i) => match i64::try_from(i) {
+                Ok(i) => visitor.visit_i64(i),
+                Err(_) => visitor.visit_f64(i as f64),
+            },
             NumberResult::F64(f) => visitor.visit_f64(f),
         }
         .map_err(|err| self.with_position(err, offset))
     }
 }
 
-macro_rules! deserialize_number {
+macro_rules! deserialize_int {
     ($method:ident) => {
         fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-            self.deserialize_number(visitor)
+            let (offset, number) = self.parse_number()?;
+            match number {
+                NumberResult::U128(u) => match u64::try_from(u) {
+                    Ok(u) => visitor.visit_u64(u),
+                    Err(_) => visitor.visit_u128(u),
+                },
+                NumberResult::I128(i) => match i64::try_from(i) {
+                    Ok(i) => visitor.visit_i64(i),
+                    Err(_) => visitor.visit_i128(i),
+                },
+                NumberResult::F64(f) => visitor.visit_f64(f),
+            }
+            .map_err(|err| self.with_position(err, offset))
         }
     };
 }
@@ -628,16 +635,16 @@ macro_rules! deserialize_collection {
 impl<'de> serde::de::Deserializer<'de> for &mut Deserializer<'de> {
     type Error = Error;
 
-    deserialize_number!(deserialize_u8);
-    deserialize_number!(deserialize_u16);
-    deserialize_number!(deserialize_u32);
-    deserialize_number!(deserialize_u64);
-    deserialize_number!(deserialize_u128);
-    deserialize_number!(deserialize_i8);
-    deserialize_number!(deserialize_i16);
-    deserialize_number!(deserialize_i32);
-    deserialize_number!(deserialize_i64);
-    deserialize_number!(deserialize_i128);
+    deserialize_int!(deserialize_u8);
+    deserialize_int!(deserialize_u16);
+    deserialize_int!(deserialize_u32);
+    deserialize_int!(deserialize_u64);
+    deserialize_int!(deserialize_u128);
+    deserialize_int!(deserialize_i8);
+    deserialize_int!(deserialize_i16);
+    deserialize_int!(deserialize_i32);
+    deserialize_int!(deserialize_i64);
+    deserialize_int!(deserialize_i128);
 
     deserialize_float!(deserialize_f32, f32, visit_f32);
     deserialize_float!(deserialize_f64, f64, visit_f64);
